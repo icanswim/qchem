@@ -5,7 +5,7 @@ An exploration of the state of the art in the application of datascience to mole
 * uses the cosmosis datascience repo for rapid prototyping
 * light weight, modular, extentable
 * pytorch=1.6, cuda=10.1
-* see setup.txt for set up notes
+* see setup_notes.txt for implementation details
 * see experiment.ipynb for examples
 
 ## References
