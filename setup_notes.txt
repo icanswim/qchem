@@ -1,0 +1,19 @@
+#instructions for setting up folders and conda enviornment
+git clone https://github.com/icanswim/cosmosis.git
+cd cosmosis
+conda create --name cosmosis --file requirements.txt
+mkdir data
+mkdir logs
+mkdir models
+
+#instructions for the manual creation of conda enviornment 
+conda create --name cosmosis -c anaconda python=3.7 numpy pandas scipy
+conda activate cosmosis
+conda install -c anaconda cudatoolkit=10.1
+conda install -c pytorch pytorch=1.6
+conda install -c pytorch torchvision=0.7
+conda install -c conda-forge jupyterlab
+conda install -c conda-forge matplotlib
+conda install -c anaconda scikit-learn
+conda install -c anaconda h5py
+conda install -c anaconda git
