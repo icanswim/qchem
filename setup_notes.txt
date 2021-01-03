@@ -18,3 +18,4 @@ conda install -c conda-forge matplotlib
 conda install -c anaconda scikit-learn
 conda install -c anaconda h5py
 conda install -c anaconda git
+conda install -c rdkit rdkit

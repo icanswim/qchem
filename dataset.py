@@ -1,4 +1,6 @@
-from ..cosmosis.dataset import CDataset, Dummy
+import sys
+sys.path.insert(0, '../')
+from cosmosis.dataset import CDataset, Dummy
 
 from abc import ABC, abstractmethod
 import os, re, random, h5py, pickle
