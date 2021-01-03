@@ -1,14 +1,15 @@
 #instructions for setting up folders and conda enviornment
 git clone https://github.com/icanswim/cosmosis.git
 cd cosmosis
-conda create --name cosmosis --file requirements.txt
+conda create --name qchem --file requirements.txt
+
 mkdir data
 mkdir logs
 mkdir models
 
 #instructions for the manual creation of conda enviornment 
-conda create --name cosmosis -c anaconda python=3.7 numpy pandas scipy
-conda activate cosmosis
+conda create --name qchem -c anaconda python=3.7 numpy pandas scipy
+conda activate qchem
 conda install -c anaconda cudatoolkit=10.1
 conda install -c pytorch pytorch=1.6
 conda install -c pytorch torchvision=0.7
