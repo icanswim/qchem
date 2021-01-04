@@ -1,6 +1,7 @@
-import sys
+import sys # required for relative imports in jupyter lab
 sys.path.insert(0, '../')
-from cosmosis.dataset import CDataset, Dummy
+
+from cosmosis.dataset import *
 
 from abc import ABC, abstractmethod
 import os, re, random, h5py, pickle
@@ -477,7 +478,7 @@ class QM7X(CDataset):
     https://arxiv.org/abs/2006.15139
     https://zenodo.org/record/3905361
     
-    decompress the .xz files in ./QM7X/
+    decompress the .xz files in qchem/data/qm7x/
     tar xvf *000.xz
     
     1000.hdf5 6.5 GB
@@ -557,8 +558,6 @@ class QM7X(CDataset):
         and selecting idconf keys.  
         returns mols[idmol] = [idconf,idconf,...]
         idconf, ID configuration (e.g., 'Geom-m1-i1-c1-opt', 'Geom-m1-i1-c1-50')
-        
-    TODO: loading multiple isotopes per molecular formula 
     """
     set_ids = ['1000', '2000', '3000', '4000', '5000', '6000', '7000', '8000']
     
