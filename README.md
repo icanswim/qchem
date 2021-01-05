@@ -1,6 +1,9 @@
 # qchem
 An exploration of the state of the art in the application of datascience to molecular quantum mechanics. 
 
+From Machine Learning for Molecular Simulation  
+>In 1929 Paul Dirac stated that:“The underlying physical laws necessary for the mathematical theory of a large >part of physics andthe whole of chemistry are thus completely known, and the difficulty is only that the exact >applicationof these laws leads to equations much too complicated to be soluble.  It therefore becomes desirable >thatapproximate practical methods of applying quantum mechanics should be developed, which can lead toan >explanation of the main features of complex atomic systems without too much computation.”  [1]Ninety  years  >later,  this  quote  is  still  state  of  the  art.   However,  in  the  last  decade,  new  tools  from  the  >rapidlydeveloping field of machine learning (ML) have started to make significant impact on the development of >approximatemethods  for  complex  atomic  systems,  bypassing  the  direct  solution  of  “equations  much  too  >complicated  to  besoluble”.
+
 ## Datasets, models and learners implemented in pytorch 
 * uses the cosmosis datascience repo for rapid prototyping
 * light weight, modular, extentable
