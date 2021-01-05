@@ -2,7 +2,7 @@
 An exploration of the state of the art in the application of datascience to molecular quantum mechanics. 
 
 From Machine Learning for Molecular Simulation  
->In 1929 Paul Dirac stated that: “The underlying physical laws necessary for the mathematical theory of a large part of physics and the whole of chemistry are thus completely known, and the difficulty is only that the exact application of these laws leads to equations much too complicated to be soluble.  It therefore becomes desirable that approximate practical methods of applying quantum mechanics should be developed, which can lead to an explanation of the main features of complex atomic systems without too much computation.”  Ninety years later,  this quote is still state of the art.  However, in the last decade, new tools from the rapidly developing field of machine learning (ML) have started to make significant impact on the development of approximate methods for >complex atomic systems, bypassing the direct solution of “equations much too complicated to be soluble”.
+>In 1929 Paul Dirac stated that: “The underlying physical laws necessary for the mathematical theory of a large part of physics and the whole of chemistry are thus completely known, and the difficulty is only that the exact application of these laws leads to equations much too complicated to be soluble.  It therefore becomes desirable that approximate practical methods of applying quantum mechanics should be developed, which can lead to an explanation of the main features of complex atomic systems without too much computation.”  Ninety years later,  this quote is still state of the art.  However, in the last decade, new tools from the rapidly developing field of machine learning (ML) have started to make significant impact on the development of approximate methods for complex atomic systems, bypassing the direct solution of “equations much too complicated to be soluble”.
 
 ## Datasets, models and learners implemented in pytorch 
 * uses the cosmosis datascience repo for rapid prototyping
@@ -21,6 +21,9 @@ https://arxiv.org/abs/1903.04388
 Machine learning for molecular simulation  
 https://arxiv.org/abs/1911.02792 
 
+Machine learning for molecular and materials science  
+https://www.researchgate.net/publication/326608140_Machine_learning_for_molecular_and_materials_science 
+
 Deep learning methods in protein structure prediction  
 https://www.sciencedirect.com/science/article/pii/S2001037019304441 
 
@@ -34,6 +37,9 @@ https://github.com/deepmind/deepmind-research/tree/master/learning_to_simulate
 Set Transformer: A Framework for Attention-based Permutation-Invariant Neural Networks  
 https://arxiv.org/abs/1810.00825  
 https://github.com/juho-lee/set_transformer 
+
+Learning continuous and data-driven molecular descriptors by translating equivalent chemical representations  
+https://pubs.rsc.org/en/content/articlehtml/2019/sc/c8sc04175j 
 
 Machine Learning Force Fields  
 https://arxiv.org/abs/2010.07067 
