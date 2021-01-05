@@ -1,13 +1,21 @@
 #instructions for setting up folders and conda enviornment
-git clone https://github.com/icanswim/cosmosis.git
-cd cosmosis
-conda create --name qchem --file requirements.txt
 
+##create a new qchem conda enviornment and folders
+git clone https://github.com/icanswim/qchem.git
+cd qchem
 mkdir data
 mkdir logs
 mkdir models
+conda create --name qchem --file requirements.txt
+conda activate qchem
+jupyter lab
 
-#instructions for the manual creation of conda enviornment 
+##manual creation of conda enviornment and folders
+git clone https://github.com/icanswim/qchem.git
+cd qchem
+mkdir data
+mkdir logs
+mkdir models
 conda create --name qchem -c anaconda python=3.7 numpy pandas scipy
 conda activate qchem
 conda install -c anaconda cudatoolkit=10.1
@@ -19,3 +27,4 @@ conda install -c anaconda scikit-learn
 conda install -c anaconda h5py
 conda install -c anaconda git
 conda install -c rdkit rdkit
+jupyter lab

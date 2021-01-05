@@ -12,19 +12,21 @@ An exploration of the state of the art in the application of datascience to mole
 AlphaFold  
 https://deepmind.com/blog/article/alphafold-a-solution-to-a-50-year-old-grand-challenge-in-biology
 
-Learning to Simulate Complex Physics with Graph Networks  
-https://arxiv.org/abs/2002.09405  
-https://github.com/deepmind/deepmind-research/tree/master/learning_to_simulate
+Deep learning for molecular design - a review of the state of the art  
+https://arxiv.org/abs/1903.04388
+
+Machine learning for molecular simulation  
+https://arxiv.org/abs/1911.02792
 
 Deep learning methods in protein structure prediction  
 https://www.sciencedirect.com/science/article/pii/S2001037019304441
 
-Deep learning for molecular design - a review of the state of the art  
-https://arxiv.org/abs/1903.04388
+Machine learning for protein folding and dynamics  
+https://arxiv.org/abs/1911.09811
 
-Ab initio solution of the many-electron Schrödinger equation with deep neural networks  
-https://journals.aps.org/prresearch/abstract/10.1103/PhysRevResearch.2.033429  
-https://github.com/deepmind/ferminet
+Learning to Simulate Complex Physics with Graph Networks  
+https://arxiv.org/abs/2002.09405  
+https://github.com/deepmind/deepmind-research/tree/master/learning_to_simulate
 
 Set Transformer: A Framework for Attention-based Permutation-Invariant Neural Networks  
 https://arxiv.org/abs/1810.00825  
@@ -42,9 +44,6 @@ https://arxiv.org/abs/2006.02619
 Bypassing the Kohn-Sham equations with machine learning  
 https://www.nature.com/articles/s41467-017-00839-3
 
-Solving Many-Electron Schrödinger Equation Using Deep Neural Networks  
-https://arxiv.org/abs/1807.07014
-
 ### Chemistry Machine Learning Libraries 
 RDKit  
 https://www.rdkit.org/
@@ -60,10 +59,6 @@ https://github.com/materialsvirtuallab/megnet
 MoleculeNet: A Benchmark for Molecular Machine Learning  
 https://arxiv.org/abs/1703.00564  
 https://github.com/deepchem/deepchem
-
-NetKet: A Machine Learning Toolkit for Many-Body Quantum Systems  
-https://arxiv.org/abs/1904.00031  
-https://github.com/netket/netket
 
 ### Datasets 
 GDB Databases
@@ -84,8 +79,6 @@ https://www.kaggle.com/c/champs-scalar-coupling
 
 http://quantum-machine.org/datasets/ 
 
-### Quantum Machine Learning 
-A beginners guide to quantum machine learning  
-https://blog.paperspace.com/beginners-guide-to-quantum-machine-learning/
+
 
 
