@@ -558,6 +558,8 @@ class QM7X(CDataset):
         and selecting idconf keys.  
         returns mols[idmol] = [idconf,idconf,...]
         idconf, ID configuration (e.g., 'Geom-m1-i1-c1-opt', 'Geom-m1-i1-c1-50')
+        
+    TODO bottlenecked?  
     """
     set_ids = ['1000', '2000', '3000', '4000', '5000', '6000', '7000', '8000']
     
