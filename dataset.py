@@ -370,10 +370,10 @@ class ANI1x(CDataset):
     def __getitem__(self, i):
         ci = self.get_conformation_index(self.datadic[i])
         
-        def get_features(features, dtype, exclude_cat=False):
+        def get_features(features, dtype, exclude_cat=[]):
             data = []
             for f in features:
-                if f == 'atomic_numbers' and exclude_cat:
+                if f in exclude_cat:
                     continue
                 #(Na)
                 elif f in ['atomic_numbers']:
@@ -406,7 +406,7 @@ class ANI1x(CDataset):
         if 'atomic_numbers' in self.features:
             x_cat.append(as_tensor(get_features(['atomic_numbers'], 'int64')))
             
-        x_con = get_features(self.features, 'float32', exclude_cat=True)
+        x_con = get_features(self.features, 'float32', exclude_cat=['atomic_numbers'])
         
         targets = get_features(self.targets, 'float64')
             
@@ -569,68 +569,73 @@ class QM7X(CDataset):
                   'hDIP','hRAT','hVDIP','hVOL','mC6','mPOL','mTPOL','pbe0FOR', 
                   'sMIT','sRMSD','totFOR','vDIP','vEQ','vIQ','vTQ','vdwFOR','vdwR']
     
-    def __init__(self, features=['atNUM','atXYZ'], target=['eAT'], pad=None, 
+    def __init__(self, features=['atNUM','atXYZ'], targets=['eAT'], pad=None, 
                          in_dir='./data/qm7x/', selector=['i1-c1-opt']):
-        self.features, self.target, self.pad, self.in_dir = features, target, pad, in_dir
+        self.features, self.targets, self.pad, self.in_dir = features, targets, pad, in_dir
         self.embed = []
-        self.datamap = QM7X.map_dataset(in_dir, selector)
-        self.ds_idx = list(self.datamap.keys())
-        self.load_data(in_dir)
+        self.datadic = self.load_data(in_dir, selector)
+        self.ds_idx = list(self.datadic.keys())
          
     def __getitem__(self, i):
-        features = []
-        target = []
-        # select the correct h5 handle
-        if i == 1: j = 1
-        else: j = i-1
-        k = j // 1000  
-        handle = self.h5_handles[k]
-        #if multiple conformations for a given formula i, one is randomly selected
-        conformations = self.datamap[i]
-        conformation = random.choice(conformations)
-        mol = handle[str(i)][conformation]
-        for f in self.features:
-            features.append(np.reshape(mol[f][()], -1).astype(np.float32))
-        features = np.concatenate(features)
+        
         if self.pad:
-            features = np.pad(features, (0, self.pad - len(features)))
-            
-        for t in self.target:
-            target.append(np.reshape(mol[t][()], -1))
-        target = np.concatenate(target)
-            
+                features = np.pad(features, (0, self.pad - len(features)))
         return as_tensor(features), [], as_tensor(target)
-         
+    
     def __len__(self):
         return len(self.ds_idx)
-    
-    def load_data(self, in_dir):
-        self.h5_handles = []
-        for set_id in QM7X.set_ids:
-            handle = h5py.File(in_dir+set_id+'.hdf5', 'r')
-            self.h5_handles.append(handle)
-    
-    @classmethod
-    def map_dataset(cls, in_dir='./data/QM7X/', selector=[]):
+            
+    def load_data(in_dir='./data/QM7X/', selector=[]):
         """seletor = list of regular expression strings (attr) for searching 
         and selecting idconf keys.  
         returns mols[idmol] = [idconf,idconf,...]
         idconf, ID configuration (e.g., 'Geom-m1-i1-c1-opt', 'Geom-m1-i1-c1-50')
         """
+        ci = self.get_conformation_index(self.datadic[i])
+        
+        def get_features(features, dtype, exclude_cat=[]):
+            data = []
+            for f in features:
+                if f in exclude_cat:
+                    continue
+                #(Na)
+                elif f in ['atNUM']:
+                    out = np.reshape(self.datadic[i][f], -1).astype(dtype)
+                    if self.pad:
+                        out = np.pad(out, (0, (self.pad - out.shape[0])))          
+                #(Nc, Na)    
+                elif f in []:
+                    out = np.reshape(self.datadic[i][f][ci], -1).astype(dtype)
+                    if self.pad:
+                        out = np.pad(out, (0, (self.pad - out.shape[0])))        
+                #(Nc, Na, 3)   
+                elif f in ['coordinates','wb97x_dz.forces','wb97x_dz.forces']:
+                    out = np.reshape(self.datadic[i][f][ci], -1).astype(dtype)
+                    if self.pad:
+                        out = np.pad(out, (0, (self.pad*3 - out.shape[0])))
+                #(Nc, 6), (Nc, 3), (Nc)
+                else:
+                    out = np.reshape(self.datadic[i][f][ci], -1).astype(dtype)   
+                data.append(out)
+            if len(data) == 0:
+                return data
+            else: 
+                return np.concatenate(data)
+        
         mols = {}
         structure_count = 0
         for set_id in QM7X.set_ids:
             with h5py.File(in_dir+set_id+'.hdf5', 'r') as f:
-                print('mapping... ', f)
+                print('loading... ', f)
                 for idmol in f:
-                    mols[int(idmol)] = []
+                    mols[int(idmol)] = {}
                     for idconf in f[idmol]:
                         for attr in selector:
                             if re.search(attr, idconf):
-                                mols[int(idmol)].append(idconf)
+                                mols[int(idmol)][idconf] = load_features(f[idmol][idconf]
                                 structure_count += 1
-                    if mols[int(idmol)] == []: del mols[int(idmol)]
-                    
+                    if mols[int(idmol)] == {}: del mols[int(idmol)]
+                                            
         print('molecular formula (idmol) mapped: ', len(mols))
         print('total molecular structures (idconf) mapped: ', structure_count)
         return mols
