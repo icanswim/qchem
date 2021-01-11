@@ -30,6 +30,9 @@ https://www.sciencedirect.com/science/article/pii/S2001037019304441
 Machine learning for protein folding and dynamics  
 https://arxiv.org/abs/1911.09811 
 
+Graph Attention Networks  
+https://arxiv.org/abs/1710.10903 
+
 Learning to Simulate Complex Physics with Graph Networks  
 https://arxiv.org/abs/2002.09405  
 https://github.com/deepmind/deepmind-research/tree/master/learning_to_simulate 
@@ -70,6 +73,9 @@ https://arxiv.org/abs/1703.00564
 https://github.com/deepchem/deepchem 
 
 ### Datasets 
+Quantum-Machine.org  
+http://quantum-machine.org/datasets/ 
+
 GDB Databases  
 https://gdb.unibe.ch/downloads/ 
 
@@ -82,11 +88,9 @@ https://arxiv.org/abs/2006.15139
 https://zenodo.org/record/3905361 
 
 The ANI-1ccx and ANI-1x data sets, coupled-cluster and density functional theory properties for molecules  
-https://www.nature.com/articles/s41597-020-0473-z 
+https://www.nature.com/articles/s41597-020-0473-z#Sec11 
 
 https://www.kaggle.com/c/champs-scalar-coupling 
-
-http://quantum-machine.org/datasets/ 
 
 
 
