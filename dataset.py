@@ -299,19 +299,30 @@ class QM9(CDataset):
         
         return x_con, self.x_cat, y
 
-    
+        
 class ANI1x(CDataset):
     """https://www.nature.com/articles/s41597-020-0473-z#Sec11
     https://github.com/aiqm/ANI1x_datasets
     https://springernature.figshare.com/articles/dataset/ANI-1x_Dataset_Release/10047041
     
-    The dataset is organized
-    [molecular formula][conformation index][feature]
+    The source dataset is organized:
+    [molecular formula][conformation index][feature,feature,...]
     
-    Indexed by a molecular formula and conformation index
+    It is indexed by a molecular formula and conformation index
+    
+    This dataset is a pytorch and cosmosis dataset:
     Returns [features,features,...,padding], [target,target,...]
     
     Longest molecule is 63 atoms
+    
+    select:
+        molecular formula
+        conformation
+        features
+        target
+        padding
+        data file location
+        embedding options
     
     criterion = the feature used to select the conformation
     conformation = logic used on the criterion feature
@@ -319,6 +330,10 @@ class ANI1x(CDataset):
         'max' - choose the index with the highest value
         'random' - choose the index randomly 
         int - choose the index int
+    features = ['feature','feature',...]
+    targets = ['feature',...]
+    pad = int/False
+    embed = [(voc,vec,train)]
     
     Na = number of atoms, Nc = number of conformations
     Atomic Positions ‘coordinates’ Å float32 (Nc, Na, 3)
@@ -359,12 +374,13 @@ class ANI1x(CDataset):
     
     def __init__(self, features=['atomic_numbers'], targets=[], pad=63,
                        embed=[(9,16,True)], criterion=None, conformation='random',
-                       in_file='./data/ani1/ani1x-release.h5'):
+                       in_file='./data/ani1x/ani1x-release.h5'):
+        
         self.features, self.targets = features, targets
-        self.conformation, self.embed  = conformation, embed
-        self.in_file, self.pad, self.criterion = in_file, pad, criterion
+        self.pad, self.embed, self.in_file  = pad, embed, in_file
+        self.conformation, self.criterion = conformation, criterion
 
-        self.datadic = self.load_data(features, targets, in_file)
+        self.datadic = self.load_data()
         self.ds_idx = list(self.datadic.keys())
     
     def __getitem__(self, i):
@@ -415,7 +431,7 @@ class ANI1x(CDataset):
     def __len__(self):
         return len(self.ds_idx)
     
-    def load_data(self, features, target, in_file):
+    def load_data(self):
         """data_keys = ['wb97x_dz.energy','wb97x_dz.forces'] 
         # Original ANI-1x data (https://doi.org/10.1063/1.5023802)
         data_keys = ['wb97x_tz.energy','wb97x_tz.forces'] 
@@ -429,11 +445,12 @@ class ANI1x(CDataset):
         ragged dataset each mol has all keys and nan for missing values
         throws out the mol if any of the feature values or criterion feature values are missing
         """
-        attributes = features+target
+        structure_count = 0
+        attributes = self.features+self.targets
         if self.criterion != None and self.criterion not in attributes:
             attributes.append(self.criterion)
         datadic = {}
-        with h5py.File(in_file, 'r') as f:
+        with h5py.File(self.in_file, 'r') as f:
             for mol in f.keys():
                 nan = False
                 while not nan:  # if empty values break out and del mol
@@ -444,11 +461,12 @@ class ANI1x(CDataset):
                         else:
                             data[attr] = f[mol][attr][()]
                             datadic[mol] = data
+                            structure_count += 1
                     break
                 if nan: 
                     try: del datadic[mol]
                     except: pass
-                        
+        print('structures loaded: ', structure_count)               
         return datadic
     
     def get_conformation_index(self, mol):
@@ -556,89 +574,117 @@ class QM7X(CDataset):
     
     seletor = list of regular expression strings (attr) for searching 
         and selecting idconf keys.  
-        returns mols[idmol] = [idconf,idconf,...]
+        returns datadic[idmol] = [idconf,idconf,...]
         idconf, ID configuration (e.g., 'Geom-m1-i1-c1-opt', 'Geom-m1-i1-c1-50')
-        
-    TODO bottlenecked?  
+         
     """
-    set_ids = ['1000', '2000', '3000', '4000', '5000', '6000', '7000', '8000']
+    set_ids = ['1000','2000','3000','4000','5000','6000','7000','8000']
     
-    properties = ['DIP','HLgap','KSE','atC6','atNUM','atPOL','atXYZ','eAT', 
-                  'eC','eDFTB+MBD','eEE','eH','eKIN','eKSE','eL','eMBD','eNE', 
-                  'eNN','ePBE0','ePBE0+MBD','eTS','eX','eXC','eXX','hCHG', 
-                  'hDIP','hRAT','hVDIP','hVOL','mC6','mPOL','mTPOL','pbe0FOR', 
-                  'sMIT','sRMSD','totFOR','vDIP','vEQ','vIQ','vTQ','vdwFOR','vdwR']
+    features = ['DIP','HLgap','KSE','atC6','atNUM','atPOL','atXYZ','eAT', 
+                'eC','eDFTB+MBD','eEE','eH','eKIN','eKSE','eL','eMBD','eNE', 
+                'eNN','ePBE0','ePBE0+MBD','eTS','eX','eXC','eXX','hCHG', 
+                'hDIP','hRAT','hVDIP','hVOL','mC6','mPOL','mTPOL','pbe0FOR', 
+                'sMIT','sRMSD','totFOR','vDIP','vEQ','vIQ','vTQ','vdwFOR','vdwR']
     
     def __init__(self, features=['atNUM','atXYZ'], targets=['eAT'], pad=None, 
-                         in_dir='./data/qm7x/', selector=['i1-c1-opt']):
-        self.features, self.targets, self.pad, self.in_dir = features, targets, pad, in_dir
-        self.embed = []
-        self.datadic = self.load_data(in_dir, selector)
+                         in_dir='./data/qm7x/', selector=['i1-c1-opt'],
+                            embed=[(9,16,True)], use_h5=True):
+        
+        self.features, self.targets = features, targets 
+        self.pad, self.embed, self.in_dir  = pad, embed, in_dir
+        self.selector, self.use_h5 = selector, use_h5
+        self.datadic = self.load_data()
         self.ds_idx = list(self.datadic.keys())
+        if use_h5:
+            self.h5_handles = self.load_h5()
          
     def __getitem__(self, i):
+        #if multiple conformations for a given formula i, one is randomly selected
+        conformations = self.datadic[i]['idconf']
+        conf = random.choice(conformations)
         
-        if self.pad:
-                features = np.pad(features, (0, self.pad - len(features)))
-        return as_tensor(features), [], as_tensor(target)
-    
+        if self.use_h5:
+            # select the correct h5 handle
+            if i == 1: j = 1
+            else: j = i-1
+            k = j // 1000  
+            handle = self.h5_handles[k]
+            mol = handle[str(i)][conf]
+            x_con = self.get_features(mol, self.features, 'float32',
+                                                  exclude_cat=['atNUM'])
+            x_cat = self.get_features(mol, ['atNUM'], 'int64')
+            targets = self.get_features(mol, self.targets, 'float64')
+            
+        else:
+            x_con = self.get_features(self.datadic[i][conf], self.features, 
+                                          'float32', exclude_cat=['atNUM'])
+            x_cat = self.get_features(self.datadic[i][conf], ['atNUM'], 'int64')
+            targets = self.get_features(self.datadic[i][conf], self.targets, 'float64')
+            
+        return as_tensor(x_con), as_tensor(x_cat), as_tensor(targets)
+         
     def __len__(self):
         return len(self.ds_idx)
-            
-    def load_data(in_dir='./data/QM7X/', selector=[]):
+        
+    def get_features(self, mol, features, dtype, exclude_cat=[]):
+        #datadic[idmol][idconf][feature]
+        data = []
+        for f in features:
+            if f in exclude_cat:
+                continue      
+            #(Nc, Na)    
+            elif f in ['atNUM','hVOL','hRAT','cCHG','atC6','atPOL','vdwR']:
+                out = np.reshape(mol[f], -1).astype(dtype)
+                if self.pad:
+                    out = np.pad(out, (0, (self.pad - out.shape[0])))        
+            #(Nc, Na, 3)   
+            elif f in ['atXYZ','totFOR','vdwFOR','pbe0FOR','hVDIP']:
+                out = np.reshape(mol[f], -1).astype(dtype)
+                if self.pad:
+                    out = np.pad(out, (0, (self.pad*3 - out.shape[0])))
+            #(Nc, 9), (Nc, 3), (Nc)
+            else:
+                out = np.reshape(mol[f], -1).astype(dtype)   
+            data.append(out)
+        if len(data) == 0:
+            return data
+        else: 
+            return np.concatenate(data)     
+    
+    def load_h5(self):
+        h5_handles = []
+        for set_id in QM7X.set_ids:
+            handle = h5py.File(self.in_dir+set_id+'.hdf5', 'r')
+            h5_handles.append(handle)
+        return h5_handles
+    
+    def load_data(self):
         """seletor = list of regular expression strings (attr) for searching 
         and selecting idconf keys.  
-        returns mols[idmol] = [idconf,idconf,...]
+        returns datadic[idmol] = [idconf,idconf,...]
         idconf, ID configuration (e.g., 'Geom-m1-i1-c1-opt', 'Geom-m1-i1-c1-50')
         """
-        ci = self.get_conformation_index(self.datadic[i])
-        
-        def get_features(features, dtype, exclude_cat=[]):
-            data = []
-            for f in features:
-                if f in exclude_cat:
-                    continue
-                #(Na)
-                elif f in ['atNUM']:
-                    out = np.reshape(self.datadic[i][f], -1).astype(dtype)
-                    if self.pad:
-                        out = np.pad(out, (0, (self.pad - out.shape[0])))          
-                #(Nc, Na)    
-                elif f in []:
-                    out = np.reshape(self.datadic[i][f][ci], -1).astype(dtype)
-                    if self.pad:
-                        out = np.pad(out, (0, (self.pad - out.shape[0])))        
-                #(Nc, Na, 3)   
-                elif f in ['coordinates','wb97x_dz.forces','wb97x_dz.forces']:
-                    out = np.reshape(self.datadic[i][f][ci], -1).astype(dtype)
-                    if self.pad:
-                        out = np.pad(out, (0, (self.pad*3 - out.shape[0])))
-                #(Nc, 6), (Nc, 3), (Nc)
-                else:
-                    out = np.reshape(self.datadic[i][f][ci], -1).astype(dtype)   
-                data.append(out)
-            if len(data) == 0:
-                return data
-            else: 
-                return np.concatenate(data)
-        
-        mols = {}
+        datadic = {}
         structure_count = 0
         for set_id in QM7X.set_ids:
-            with h5py.File(in_dir+set_id+'.hdf5', 'r') as f:
-                print('loading... ', f)
+            with h5py.File(self.in_dir+set_id+'.hdf5', 'r') as f:
+                print('mapping... ', f)
                 for idmol in f:
-                    mols[int(idmol)] = {}
+                    datadic[int(idmol)] = {'idconf': []}
                     for idconf in f[idmol]:
-                        for attr in selector:
+                        for attr in self.selector:
                             if re.search(attr, idconf):
-                                mols[int(idmol)][idconf] = load_features(f[idmol][idconf]
+                                datadic[int(idmol)]['idconf'].append(idconf)
                                 structure_count += 1
-                    if mols[int(idmol)] == {}: del mols[int(idmol)]
-                                            
-        print('molecular formula (idmol) mapped: ', len(mols))
+                                if not self.use_h5:
+                                    print('f[idmol][idconf].keys()', f[idmol][idconf].keys())
+                                    datadic[int(idmol)][idconf] = {idconf: f[idmol][idconf][()]}
+                                    
+                    if datadic[int(idmol)] == []: del datadic[int(idmol)]
+                    
+        print('molecular formula (idmol) mapped: ', len(datadic))
         print('total molecular structures (idconf) mapped: ', structure_count)
-        return mols
+        return datadic                                        
         
 class QM7(CDataset):
     """http://quantum-machine.org/datasets/
