@@ -599,9 +599,8 @@ class QM7X(CDataset):
             self.h5_handles = self.load_h5()
          
     def __getitem__(self, i):
-        #if multiple conformations for a given formula i, one is randomly selected
         conformations = self.datadic[i]['idconf']
-        conf = random.choice(conformations)
+        idconf = random.choice(conformations)
         
         if self.use_h5:
             # select the correct h5 handle
@@ -609,17 +608,16 @@ class QM7X(CDataset):
             else: j = i-1
             k = j // 1000  
             handle = self.h5_handles[k]
-            mol = handle[str(i)][conf]
+            mol = handle[str(i)][idconf]
             x_con = self.get_features(mol, self.features, 'float32',
                                                   exclude_cat=['atNUM'])
             x_cat = self.get_features(mol, ['atNUM'], 'int64')
             targets = self.get_features(mol, self.targets, 'float64')
             
         else:
-            x_con = self.get_features(self.datadic[i][conf], self.features, 
-                                          'float32', exclude_cat=['atNUM'])
-            x_cat = self.get_features(self.datadic[i][conf], ['atNUM'], 'int64')
-            targets = self.get_features(self.datadic[i][conf], self.targets, 'float64')
+            x_con = self.datadic[i][idconf]['x_con']
+            x_cat = self.datadic[i][idconf]['x_cat']
+            targets = self.datadic[i][idconf]['targets']
             
         return as_tensor(x_con), as_tensor(x_cat), as_tensor(targets)
          
@@ -677,8 +675,17 @@ class QM7X(CDataset):
                                 datadic[int(idmol)]['idconf'].append(idconf)
                                 structure_count += 1
                                 if not self.use_h5:
-                                    print('f[idmol][idconf].keys()', f[idmol][idconf].keys())
-                                    datadic[int(idmol)][idconf] = {idconf: f[idmol][idconf][()]}
+                                    datadic[int(idmol)][idconf] = {}
+                                    x_con = self.get_features(f[idmol][idconf], 
+                                                              self.features, 'float32', 
+                                                              exclude_cat=['atNUM'])
+                                    datadic[int(idmol)][idconf]['x_con'] = x_con
+                                    x_cat = self.get_features(f[idmol][idconf], 
+                                                              ['atNUM'], 'int64')
+                                    datadic[int(idmol)][idconf]['x_cat'] = x_cat
+                                    targets = self.get_features(f[idmol][idconf], 
+                                                                self.targets, 'float64')
+                                    datadic[int(idmol)][idconf]['targets'] = targets
                                     
                     if datadic[int(idmol)] == []: del datadic[int(idmol)]
                     
