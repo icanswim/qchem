@@ -601,7 +601,7 @@ class QM7X(CDataset):
     def __getitem__(self, i):
         conformations = self.datadic[i]['idconf']
         idconf = random.choice(conformations)
-        
+
         if self.use_h5:
             # select the correct h5 handle
             if i == 1: j = 1
@@ -619,7 +619,7 @@ class QM7X(CDataset):
             x_cat = self.datadic[i][idconf]['x_cat']
             targets = self.datadic[i][idconf]['targets']
             
-        return as_tensor(x_con), as_tensor(x_cat), as_tensor(targets)
+        return as_tensor(x_con), [as_tensor(x_cat)], as_tensor(targets)
          
     def __len__(self):
         return len(self.ds_idx)
@@ -685,9 +685,8 @@ class QM7X(CDataset):
                                     datadic[int(idmol)][idconf]['x_cat'] = x_cat
                                     targets = self.get_features(f[idmol][idconf], 
                                                                 self.targets, 'float64')
-                                    datadic[int(idmol)][idconf]['targets'] = targets
-                                    
-                    if datadic[int(idmol)] == []: del datadic[int(idmol)]
+                                    datadic[int(idmol)][idconf]['targets'] = targets          
+                    if len(datadic[int(idmol)]['idconf']) == 0: del datadic[int(idmol)]
                     
         print('molecular formula (idmol) mapped: ', len(datadic))
         print('total molecular structures (idconf) mapped: ', structure_count)
