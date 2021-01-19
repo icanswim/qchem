@@ -592,7 +592,7 @@ class QM7X(CDataset):
                 'hDIP','hRAT','hVDIP','hVOL','mC6','mPOL','mTPOL','pbe0FOR', 
                 'sMIT','sRMSD','totFOR','vDIP','vEQ','vIQ','vTQ','vdwFOR','vdwR']
     
-    atomic_n = {0:0, 1:1, 6:2, 7:3, 8:4, 9:5, 15:6, 16:7}
+    atomic_n = {0:0, 1:1, 6:2, 7:3, 8:4, 9:5, 15:6, 16:7, 17:8}
     
     def __init__(self, features=['atNUM','atXYZ'], targets=['eAT'], pad=None, 
                          in_dir='./data/qm7x/', selector=['i1-c1-opt'],
