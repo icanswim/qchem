@@ -372,6 +372,8 @@ class ANI1x(CDataset):
                 'wb97x_tz.mbis_charges', 'wb97x_tz.mbis_dipoles', 'wb97x_tz.mbis_octupoles',
                 'wb97x_tz.mbis_quadrupoles', 'wb97x_tz.mbis_volumes']
     
+    atomic_n = {0:0, 1:1, 6:2, 7:3, 8:4, 9:5}
+    
     def __init__(self, features=['atomic_numbers'], targets=[], pad=63,
                        embed=[(9,16,True)], criterion=None, conformation='random',
                        in_file='./data/ani1x/ani1x-release.h5'):
@@ -417,10 +419,14 @@ class ANI1x(CDataset):
                 return data
             else: 
                 return np.concatenate(data)
-        
+            
         x_cat = []
         if 'atomic_numbers' in self.features:
-            x_cat.append(as_tensor(get_features(['atomic_numbers'], 'int64')))
+            molecule = get_features(['atomic_numbers'], 'int64')
+            idx = []
+            for atom in molecule:
+                idx.append(ANI1x.atomic_n[atom])
+            x_cat.append(as_tensor(np.asarray(idx, 'int64')))
             
         x_con = get_features(self.features, 'float32', exclude_cat=['atomic_numbers'])
         
@@ -586,9 +592,11 @@ class QM7X(CDataset):
                 'hDIP','hRAT','hVDIP','hVOL','mC6','mPOL','mTPOL','pbe0FOR', 
                 'sMIT','sRMSD','totFOR','vDIP','vEQ','vIQ','vTQ','vdwFOR','vdwR']
     
+    atomic_n = {0:0, 1:1, 6:2, 7:3, 8:4, 9:5, 15:6, 16:7}
+    
     def __init__(self, features=['atNUM','atXYZ'], targets=['eAT'], pad=None, 
                          in_dir='./data/qm7x/', selector=['i1-c1-opt'],
-                            embed=[(9,16,True)], use_h5=True):
+                            embed=[(6,16,True)], use_h5=True):
         
         self.features, self.targets = features, targets 
         self.pad, self.embed, self.in_dir  = pad, embed, in_dir
@@ -611,15 +619,25 @@ class QM7X(CDataset):
             mol = handle[str(i)][idconf]
             x_con = self.get_features(mol, self.features, 'float32',
                                                   exclude_cat=['atNUM'])
-            x_cat = self.get_features(mol, ['atNUM'], 'int64')
             targets = self.get_features(mol, self.targets, 'float64')
-            
+            if 'atNUM' in self.features:                           
+                molecule = self.get_features(mol, ['atNUM'], 'int64')
+                
         else:
             x_con = self.datadic[i][idconf]['x_con']
-            x_cat = self.datadic[i][idconf]['x_cat']
             targets = self.datadic[i][idconf]['targets']
+            if 'atNUM' in self.features:
+                molecule = self.datadic[i][idconf]['x_cat']
             
-        return as_tensor(x_con), [as_tensor(x_cat)], as_tensor(targets)
+        x_cat = []
+        if len(molecule) > 0:
+            idx = []
+            for atom in molecule:
+                idx.append(QM7X.atomic_n[atom])
+            x_cat.append(as_tensor(np.asarray(idx, 'int64')))
+            x_cat = [as_tensor(x_cat[0])]
+            
+        return as_tensor(x_con), x_cat, as_tensor(targets)
          
     def __len__(self):
         return len(self.ds_idx)
@@ -629,7 +647,7 @@ class QM7X(CDataset):
         data = []
         for f in features:
             if f in exclude_cat:
-                continue      
+                continue          
             #(Nc, Na)    
             elif f in ['atNUM','hVOL','hRAT','cCHG','atC6','atPOL','vdwR']:
                 out = np.reshape(mol[f], -1).astype(dtype)
@@ -680,12 +698,15 @@ class QM7X(CDataset):
                                                               self.features, 'float32', 
                                                               exclude_cat=['atNUM'])
                                     datadic[int(idmol)][idconf]['x_con'] = x_con
-                                    x_cat = self.get_features(f[idmol][idconf], 
-                                                              ['atNUM'], 'int64')
-                                    datadic[int(idmol)][idconf]['x_cat'] = x_cat
+
                                     targets = self.get_features(f[idmol][idconf], 
                                                                 self.targets, 'float64')
-                                    datadic[int(idmol)][idconf]['targets'] = targets          
+                                    datadic[int(idmol)][idconf]['targets'] = targets  
+                                    
+                                    x_cat = self.get_features(f[idmol][idconf], 
+                                                                  ['atNUM'], 'int64')
+                                    datadic[int(idmol)][idconf]['x_cat'] = x_cat
+                                                          
                     if len(datadic[int(idmol)]['idconf']) == 0: del datadic[int(idmol)]
                     
         print('molecular formula (idmol) mapped: ', len(datadic))
@@ -745,7 +766,7 @@ class QM7b(CDataset):
     properties = ['E','alpha_p','alpha_s','HOMO_g','HOMO_p','HOMO_z',
                   'LUMO_g','LUMO_p','LUMO_z','IP','EA','E1','Emax','Imax']
    
-    def __init__(self, target, features=[], in_file='./data/qm7/qm7b.mat'):
+    def __init__(self, target, features=[], in_file='./data/qm7b/qm7b.mat'):
         self.features = features
         self.target = target
         self.embed = []

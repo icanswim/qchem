@@ -1,6 +1,7 @@
 #instructions for setting up folders and conda enviornment
 
 ##create a new qchem conda enviornment and folders
+git clone https://github.com/icanswim/cosmosis.git
 git clone https://github.com/icanswim/qchem.git
 cd qchem
 mkdir data
@@ -11,6 +12,7 @@ conda activate qchem
 jupyter lab
 
 ##manual creation of conda enviornment and folders
+git clone https://github.com/icanswim/cosmosis.git
 git clone https://github.com/icanswim/qchem.git
 cd qchem
 mkdir data
