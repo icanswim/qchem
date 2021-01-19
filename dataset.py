@@ -198,6 +198,7 @@ class QM9(CDataset):
         features/target = QM9.properties, 'coulomb', 'mulliken', QM9Mol.attr
         filter_on = ('attr', 'test', 'value')
         n = non random subset selection (for testing)
+        use_pickle = False/'qm9_datadic.p' (if file exists loads, if not saves)
         """
         self.features, self.target, self.pad = features, target, pad
         self.datadic = self.load_data(in_dir, n, filter_on, use_pickle)
