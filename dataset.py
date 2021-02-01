@@ -202,7 +202,7 @@ class QM9(CDataset):
         filter_on = ('attr', 'test', 'value')
         n = non random subset selection (for testing)
         embed=[('feature',voc,vec,padding_idx,param.requires_grad)] 
-        use_pickle = False/'qm9_datadic.p' (if file exists loads, if not saves)
+        use_pickle = False/'qm9_datadic.p' (if file exists loads, if not creates and saves)
         """
         self.features, self.targets, self.pad = features, targets, pad
         self.datadic = self.load_data(in_dir, n, filter_on, use_pickle)
@@ -225,14 +225,14 @@ class QM9(CDataset):
             flat = np.reshape(np.asarray(getattr(mol, feature), dtype=dtype), -1)
             if self.pad:
                 if feature in ['coulomb','adjacency','distance']: 
-                    return np.pad(flat, (0, self.pad**2-len(getattr(mol, feature))**2))
+                    out = np.pad(flat, (0, self.pad**2-len(getattr(mol, feature))**2))
                 elif feature == 'mulliken':
-                    return np.pad(getattr(mol, feature), (0, self.pad-len(getattr(mol, feature))))
+                    out = np.pad(getattr(mol, feature), (0, self.pad-len(getattr(mol, feature))))
                 elif feature in QM9.properties: 
-                    return flat
+                    out = flat
                 else: 
-                    return flat
-            data.append(flat)
+                    out = flat
+            data.append(out)
         if len(data) == 0:
             return data
         else:
@@ -263,11 +263,11 @@ class QM9(CDataset):
                     datadic[int(filename[-10:-4])] = QM9Mol(in_dir+filename)
                     
                     if filter_on:
-                        val = self.load_features(datadic[int(filename[-10:-4])], 
-                                                     filter_on[0])
+                        val = self.get_features(datadic[int(filename[-10:-4])], 
+                                                     [filter_on[0]], np.float32)
                         val = np.array2string(val, precision=4, floatmode='maxprec')[1:-1]
                      
-                        if eval(val+filter_on[1]+filter_on[2]):
+                        if not eval(val+filter_on[1]+filter_on[2]):
                             del datadic[int(filename[-10:-4])]
                         
                     if i % 10000 == 1: 
@@ -715,6 +715,8 @@ class QM7(CDataset):
     Composition in a Bayesian Regularized Neural Networks
     https://arxiv.org/abs/1904.10321
     """
+    atomic_n = {0:0, 1:1, 6:2, 7:3, 8:4, 16:5}
+    
     def __init__(self, features=[], targets=[], embed=[], 
                      in_file = './data/qm7/qm7.mat'):
         
@@ -743,9 +745,16 @@ class QM7(CDataset):
         
         x_con = get_features(self.features, np.float32)
         targets = get_features(self.targets, np.float64)
-        x_cat = get_features([self.embed[0][0]], np.int64)
+        molecule = get_features([self.embed[0][0]], np.int64)
+        
+        x_cat = []
+        if len(molecule) > 0:
+            idx = []
+            for atom in molecule:
+                idx.append(QM7.atomic_n[atom])
+            x_cat.append(as_tensor(np.asarray(idx, 'int64')))
 
-        return as_tensor(x_con), [as_tensor(x_cat)], as_tensor(targets)
+        return as_tensor(x_con), x_cat, as_tensor(targets)
     
     def __len__(self):
         return len(self.ds_idx)
