@@ -6,8 +6,6 @@ from cosmosis.dataset import *
 from abc import ABC, abstractmethod
 import os, re, random, h5py, pickle
 
-import pandas as pd
-from pandas.api.types import CategoricalDtype
 import numpy as np
 
 from scipy import spatial as sp
@@ -377,7 +375,7 @@ class ANI1x(CDataset):
     atomic_n = {0:0, 1:1, 6:2, 7:3, 8:4, 9:5}
     
     def __init__(self, features=['coordinates'], targets=[], pad=63,
-                 embed=[('atomic_numbers',9,16,True)], criterion=None, 
+                 embed=[('atomic_numbers',9,16,0,True)], criterion=None, 
                  conformation='random', in_file='./data/ani1x/ani1x-release.h5'):
         
         self.features, self.targets = features, targets
@@ -422,7 +420,7 @@ class ANI1x(CDataset):
             
         x_cat = []
         if len(self.embed) > 0:
-            molecule = get_features(self.embed[0][0], 'int64')
+            molecule = get_features([self.embed[0][0]], 'int64')
             idx = []
             for atom in molecule:
                 idx.append(ANI1x.atomic_n[atom])
@@ -452,7 +450,7 @@ class ANI1x(CDataset):
         throws out the mol if any of the feature values or criterion feature values are missing
         """
         structure_count = 0
-        attributes = self.features+self.targets
+        attributes = self.features+self.targets+[self.embed[0][0]]
         if self.criterion != None and self.criterion not in attributes:
             attributes.append(self.criterion)
         datadic = {}
@@ -596,7 +594,7 @@ class QM7X(CDataset):
     
     def __init__(self, features=['atXYZ'], targets=['eAT'], pad=None, 
                          in_dir='./data/qm7x/', selector=['i1-c1-opt'],
-                            embed=[('atNUM',6,16,True)], use_h5=True):
+                            embed=[('atNUM',6,16,0,True)], use_h5=True):
         
         self.features, self.targets = features, targets 
         self.pad, self.embed, self.in_dir  = pad, embed, in_dir
@@ -619,7 +617,7 @@ class QM7X(CDataset):
             mol = handle[str(i)][idconf]
             x_con = self.get_features(mol, self.features, 'float32')
             targets = self.get_features(mol, self.targets, 'float64')             
-            molecule = self.get_features(mol, self.embed[0][0], 'int64')   
+            molecule = self.get_features(mol, [self.embed[0][0]], 'int64')   
         else:
             x_con = self.datadic[i][idconf]['x_con']
             targets = self.datadic[i][idconf]['targets']
@@ -694,7 +692,7 @@ class QM7X(CDataset):
                                     datadic[int(idmol)][idconf]['targets'] = targets  
                                     
                                     x_cat = self.get_features(f[idmol][idconf], 
-                                                              self.embed[0][0], 'int64')
+                                                              [self.embed[0][0]], 'int64')
                                     datadic[int(idmol)][idconf]['x_cat'] = x_cat
                                                           
                     if len(datadic[int(idmol)]['idconf']) == 0: del datadic[int(idmol)]
@@ -713,19 +711,42 @@ class QM7(CDataset):
     hybrid functional (PBE0). This dataset features a large variety of molecular structures 
     such as double and triple bonds, cycles, carboxy, cyanide, amide, alcohol and epoxy.
     
-    https://arxiv.org/abs/1904.10321
-    Prediction of the Atomization Energy of Molecules Using Coulomb Matrix and Atomic 
+    Prediction of the Atomization Energy of Molecules Using Coulomb Matrix and Atomic
     Composition in a Bayesian Regularized Neural Networks
+    https://arxiv.org/abs/1904.10321
     """
-    def __init__(self, in_file = './data/qm7/qm7.mat'):
-        self.load_data(in_file)
-        self.embed = []
-        self.x_cat = []
+    def __init__(self, features=[], targets=[], embed=[], 
+                     in_file = './data/qm7/qm7.mat'):
         
-    def __getitem__(self, i): 
-        return as_tensor(np.reshape(self.coulomb[i,:,:], -1)), self.x_cat, \
-                    as_tensor(np.reshape(self.ae[:,i], -1))
-      
+        self.features, self.targets = features, targets
+        self.embed = embed
+        self.load_data(in_file)
+        
+    def __getitem__(self, i):
+        
+        def get_features(features, dtype):
+            data = []
+            for f in features:
+                attr = getattr(self, f)
+                if f in ['coulomb']:
+                    out = attr[i,:,:]
+                elif f in ['xyz','atoms']:
+                    out = attr[i,:]
+                elif f in ['ae']:
+                    out = attr[:,i]
+                data.append(np.reshape(out, -1).astype(dtype))
+                
+            if len(data) == 0:
+                return data
+            else: 
+                return np.concatenate(data)
+        
+        x_con = get_features(self.features, np.float32)
+        targets = get_features(self.targets, np.float64)
+        x_cat = get_features([self.embed[0][0]], np.int64)
+
+        return as_tensor(x_con), [as_tensor(x_cat)], as_tensor(targets)
+    
     def __len__(self):
         return len(self.ds_idx)
     
@@ -735,7 +756,7 @@ class QM7(CDataset):
         self.xyz = qm7['R'] # (7165, 3)
         self.atoms = qm7['Z'] # (7165, 23)
         self.ae = qm7['T'] # (1, 7165) atomization energy
-        self.ds_idx = list(range(1, self.coulomb.shape[0]))
+        self.ds_idx = list(range(7165))
         
         
 class QM7b(CDataset):
@@ -750,172 +771,48 @@ class QM7b(CDataset):
     spectrum simulations (10nm-700nm) first excitation energy, optimal absorption maximum, 
     intensity maximum.
     
-    https://th.fhi-berlin.mpg.de/site/uploads/Publications/QM-NJP_20130315.pdf
     Machine Learning of Molecular Electronic Properties in Chemical Compound Space
+    https://th.fhi-berlin.mpg.de/site/uploads/Publications/QM-NJP_20130315.pdf
     """
     properties = ['E','alpha_p','alpha_s','HOMO_g','HOMO_p','HOMO_z',
                   'LUMO_g','LUMO_p','LUMO_z','IP','EA','E1','Emax','Imax']
    
-    def __init__(self, target, features=[], in_file='./data/qm7b/qm7b.mat'):
-        self.features = features
-        self.target = target
-        self.embed = []
-        self.x_cat = []
-        self.load_data(target, features, in_file)
-        
-    def __getitem__(self, i): 
-        flat_c = np.reshape(self.coulomb[i-1,:,:], -1).astype(np.float32)
-        x_con = np.concatenate((flat_c, 
-                    self.properties[self.features].iloc[i].astype(np.float32)), axis=0)
-        return as_tensor(x_con), self.x_cat, as_tensor(self.y[:,i-1])
-      
-    def __len__(self):
-        return len(self.ds_idx)  
-    
-    def load_data(self, target, features, in_file):
-        qm7b = loadmat(in_file)
-        self.coulomb = qm7b['X'] # (7211, 23, 23)
-        self.properties = pd.DataFrame(data=qm7b['T'], dtype=np.float32, 
-                                       columns=QM7b.properties) # (7211, 14)
-        self.y = self.properties.pop(self.target).values.reshape(1, -1) # (1, 7211) 
-        self.ds_idx = list(range(self.coulomb.shape[0]))
-          
-        
-class Champs(CDataset):
-    """https://www.kaggle.com/c/champs-scalar-coupling
-    85003 molecules, 1533536 atoms, 4658146 couplings, 2505542 test couplings
-    
-    potential_energy.csv ['molecule_name','potential_energy'] 
-    scalar_coupling_contributions.csv 
-        ['molecule_name','atom_index_0','atom_index_1','type','fc','sd','pso','dso'] 
-    train.csv 
-        ['id','molecule_name','atom_index_0','atom_index_1','type','scalar_coupling_constant'] 
-    dipole_moments.csv ['molecule_name','X','Y','Z'] 
-    mulliken_charges.csv ['molecule_name','atom_index','mulliken_charge'] 
-    sample_submission.csv ['id','scalar_coupling_constant'] 
-    structures.csv ['molecule_name','atom_index','atom','x','y','z'] 
-    test.csv ['id', 'molecule_name','atom_index_0','atom_index_1','type'] n=2505542
-
-    TODO atom_idx vs coulomb idx significance
-    TODO make forward as well as reverse connections selected for test set (use id)
-    """
-    files = ['magnetic_shielding_tensors.csv', 'potential_energy.csv', 
-             'scalar_coupling_contributions.csv', 'train.csv', 'dipole_moments.csv', 
-             'mulliken_charges.csv', 'sample_submission.csv', 'structures.csv', 'test.csv']
-    types = ['1JHC', '2JHH', '1JHN', '2JHN', '2JHC', '3JHH', '3JHC', '3JHN']
-    atomic_n = {'C': 6, 'H': 1, 'N': 7, 'O': 8, 'F': 9}
-    
-    def __init__(self, in_dir='./data/champs/', n=4658146, features=True, use_h5=False, infer=False):
-        self.in_dir = in_dir
-        self.embed = [(8,128,True),(32,32,False),(4,64,True),(32,32,False),(4,64,True)]  
-        self.con_ds, self.cat_ds, self.target_ds = self.load_data(self.in_dir, features, use_h5, infer)
-        self.ds_idx = list(range(len(self.target_ds)))
+    def __init__(self, features=[], targets=[], embed=[], 
+                     in_file='./data/qm7b/qm7b.mat'):
+        self.features, self.targets = features, targets
+        self.embed = embed
+        self.load_data(in_file)
         
     def __getitem__(self, i):
         
-        def to_torch(ds, i):
-            if len(ds) == 0:
-                return []
-            else: return as_tensor(ds[i])
-           
-        x_con = to_torch(self.con_ds, i)
-        x_cat = to_torch(self.cat_ds, i)
-        y = to_torch(self.target_ds, i)
-        return x_con, x_cat, y
+        def get_features(features, dtype):
+            data = []
+            for f in features:
+                if f in ['coulomb']:
+                    out = getattr(self, f)[i,:,:]
+                elif f in ['E','alpha_p','alpha_s','HOMO_g','HOMO_p','HOMO_z',
+                           'LUMO_g','LUMO_p','LUMO_z','IP','EA','E1','Emax','Imax']:
+                    out = getattr(self, 'properties')[i,QM7b.properties.index(f)]
+                else:
+                    NotImplemented('feature not found...')
+                data.append(np.reshape(out, -1).astype(dtype))
+                
+            if len(data) == 0:
+                return data
+            else: 
+                return np.concatenate(data)
+        
+        x_con = get_features(self.features, np.float32)
+        targets = get_features(self.targets, np.float64)
+
+        return as_tensor(x_con), [], as_tensor(targets)
     
     def __len__(self):
-        return len(self.ds_idx)
+        return len(self.ds_idx)  
     
-    def load_data(self, in_dir, features, use_h5, infer):
-
-        if infer:
-            df = pd.read_csv(in_dir+'test.csv', header=0, names=['id','molecule_name', 
-                   'atom_index_0','atom_index_1','type'], index_col=False)
-            target_ds = df['id'].values.astype('int64')
-            
-        else:
-            df = pd.read_csv(in_dir+'train.csv', header=0, names=['id','molecule_name', 
-                 'atom_index_0','atom_index_1','type','scalar_coupling_constant'], index_col=False)
-            target_ds = df.pop('scalar_coupling_constant').astype('float32')
-            
-#             pe = pd.read_csv(in_dir+'potential_energy.csv', header=0, names=['molecule_name',
-#                                                  'potential_energy'], index_col=False)
-#             mulliken = pd.read_csv(in_dir+'mulliken_charges.csv', header=0, names=['molecule_name',
-#                                'atom_index','mulliken_charge'], index_col=False)
-            
-        structures = pd.read_csv(in_dir+'structures.csv', header=0, names=['molecule_name',
-                             'atom_index','atom','x','y','z'], index_col=False)
-        df = df.merge(structures, how='left', left_on=['molecule_name','atom_index_0'],
-                                              right_on=['molecule_name','atom_index'],
-                                              suffixes=('_0','_1'))
-        df = df.merge(structures, how='left', left_on=['molecule_name','atom_index_1'],
-                                              right_on=['molecule_name','atom_index'],
-                                              suffixes=('_0','_1'))
-
-        df.columns = ['id', 'molecule_name','atom_index_0_drop','atom_index_1_drop','type',
-                      'atom_index_0','atom_0','x_0','y_0','z_0','atom_index_1','atom_1',
-                      'x_1','y_1','z_1']
-
-        df = df.drop(columns=['atom_index_0_drop','atom_index_1_drop'])
-
-        df = df[['id','molecule_name','type','atom_index_0','atom_0','x_0','y_0','z_0',
-                 'atom_index_1','atom_1','x_1','y_1','z_1']]
-
-        if not infer:
-            df = pd.concat([df, target_ds], axis=1)        
-            # create reverse connections           
-            rev = df.copy()
-            rev.columns = ['id', 'molecule_name','type','atom_index_1','atom_1',
-                           'x_1','y_1','z_1','atom_index_0','atom_0','x_0','y_0',
-                           'z_0','scalar_coupling_constant']
-            rev = rev[['id','molecule_name','type', 'atom_index_0','atom_0','x_0',
-                       'y_0','z_0','atom_index_1','atom_1','x_1','y_1','z_1',
-                       'scalar_coupling_constant']]
-            df = pd.concat([df, rev])
-            target_ds = df.pop('scalar_coupling_constant').values.astype('float32')
-           
-        categorical = ['type','atom_index_0','atom_0','atom_index_1','atom_1']
-        continuous = ['x_0','y_0','z_0','x_1','y_1','z_1']
-        if not features:
-            continuous = []
-        
-        df[categorical] = df[categorical].astype('category')
-        df[categorical] = df[categorical].apply(lambda x: x.cat.codes)
-        df[categorical] = df[categorical].astype('int64')
-        df[continuous] = df[continuous].astype('float32')
-
-        con_ds = df[continuous].values
-        cat_ds = df[categorical].values
+    def load_data(self, in_file):
+        qm7b = loadmat(in_file)
+        self.coulomb = qm7b['X'] # (7211, 23, 23)
+        self.properties = qm7b['T'] # (7211, 14)
+        self.ds_idx = list(range(7211))
           
-        lookup = df.pop('molecule_name').str.slice(start=-6).astype('int64')
-       
-        if use_h5:
-            print('creating Champs h5 dataset...')
-            with h5py.File(in_dir+'champs_cat.h5', 'w') as f:
-                # index in with empty tuple [()]
-                cat_ds = f.create_dataset('x_cat', data=cat_ds, chunks=True)[()] 
-            with h5py.File(in_dir+'champs_con.h5', 'w') as f:
-                con_ds = f.create_dataset('x_con', data=con_ds, chunks=True)[()]
-            with h5py.File(in_dir+'champs_target.h5', 'w') as f:
-                target_ds = f.create_dataset('target', data=target_ds, chunks=True)[()]
-            with h5py.File(in_dir+'champs_lookup.h5', 'w') as f:
-                self.lookup = f.create_dataset('lookup', data=lookup, chunks=True)[()]
-        else: 
-            self.lookup = lookup
-
-        return con_ds, cat_ds, np.reshape(target_ds, (-1, 1))
-
-    @classmethod
-    def inspect_csv(cls, in_dir='./data/'): 
-        feature_labels = {}
-        for f in Champs.files:
-            out = pd.read_csv(in_dir + f)
-            print(f, '\n')
-            print(out.info(), '\n')
-            print(out.head(5), '\n')
-            print(out.describe(), '\n')
-            feature_labels[f] = list(out.columns)
-            del out
-            
-        for fea in feature_labels:
-            print(fea, feature_labels[fea], '\n')
