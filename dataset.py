@@ -605,11 +605,12 @@ class QM7X(CDataset):
             self.h5_handles = self.load_h5()
          
     def __getitem__(self, i):
+        #if multiple conformations one is randomly selected
         conformations = self.datadic[i]['idconf']
         idconf = random.choice(conformations)
 
         if self.use_h5:
-            # select the correct h5 handle
+            #select the correct h5 handle
             if i == 1: j = 1
             else: j = i-1
             k = j // 1000  
@@ -639,17 +640,17 @@ class QM7X(CDataset):
         #datadic[idmol][idconf][feature]
         data = []
         for f in features:
-            out = np.reshape(mol[f], -1).astype(dtype)
+            _out = np.reshape(mol[f], -1).astype(dtype)
             if self.pad:
                 #(Nc, Na)    
                 if f in ['atNUM','hVOL','hRAT','cCHG','atC6','atPOL','vdwR']:
-                    out = np.pad(out, (0, (self.pad - out.shape[0])))        
+                    out = np.pad(_out, (0, (self.pad - _out.shape[0])))        
                 #(Nc, Na, 3)   
                 elif f in ['atXYZ','totFOR','vdwFOR','pbe0FOR','hVDIP']:
-                    out = np.pad(out, (0, (self.pad*3 - out.shape[0])))
+                    out = np.pad(_out, (0, (self.pad*3 - _out.shape[0])))
                 #(Nc, 9), (Nc, 3), (Nc)
                 else:
-                    continue   
+                    out = _out 
             data.append(out)
         if len(data) == 0:
             return data
