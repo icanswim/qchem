@@ -333,7 +333,7 @@ class ANI1x(CDataset):
     features = ['feature','feature',...]
     targets = ['feature',...]
     pad = int/False
-    embed = [(voc,vec,train)] 
+    embed = [('feature',voc,vec,padding_idx,train)] 
     
     Na = number of atoms, Nc = number of conformations
     Atomic Positions ‘coordinates’ Å float32 (Nc, Na, 3)
@@ -362,6 +362,8 @@ class ANI1x(CDataset):
     Electric         ‘wb97x_tz.mbis_quadrupoles’ a.u. float32 (Nc, Na)
     Moments          ‘wb97x_tz.mbis_octupoles’ a.u. float32 (Nc, Na)
     Atomic Volumes   ‘wb97x_tz.mbis_volumes’ a.u. float32 (Nc, Na)
+    
+    distance = (Na, Na) distance matrix constructed from 'coordinates' feature
     """
     features = ['atomic_numbers', 'ccsd(t)_cbs.energy', 'coordinates', 'hf_dz.energy',
                 'hf_qz.energy', 'hf_tz.energy', 'mp2_dz.corr_energy', 'mp2_qz.corr_energy',
@@ -374,7 +376,7 @@ class ANI1x(CDataset):
     
     atomic_n = {0:0, 1:1, 6:2, 7:3, 8:4, 9:5}
     
-    def __init__(self, features=['coordinates'], targets=[], pad=63,
+    def __init__(self, features=['distance'], targets=[], pad=63,
                  embed=[('atomic_numbers',9,16,0,True)], criterion=None, 
                  conformation='random', in_file='./data/ani1x/ani1x-release.h5'):
         
@@ -409,6 +411,13 @@ class ANI1x(CDataset):
                     out = np.reshape(self.datadic[i][f][ci], -1).astype(dtype)
                     if self.pad:
                         out = np.pad(out, (0, (self.pad*3 - out.shape[0])))
+                #(Na, Na)
+                elif f in ['distance']:
+                    out = self.datadic[i]['coordinates'][ci]
+                    out = sp.distance.squareform(sp.distance.pdist(out))
+                    out = np.reshape(out, -1).astype(dtype)
+                    if self.pad:
+                        out = np.pad(out, (0, (self.pad*self.pad - out.shape[0])))
                 #(Nc, 6), (Nc, 3), (Nc)
                 else:
                     out = np.reshape(self.datadic[i][f][ci], -1).astype(dtype)   
@@ -450,7 +459,10 @@ class ANI1x(CDataset):
         throws out the mol if any of the feature values or criterion feature values are missing
         """
         structure_count = 0
-        attributes = self.features+self.targets+[self.embed[0][0]]
+        if len(self.embed) > 0:
+            attributes = self.features+self.targets+[self.embed[0][0]]
+        else:
+            attributes = self.features+self.targets
         if self.criterion != None and self.criterion not in attributes:
             attributes.append(self.criterion)
         datadic = {}
@@ -460,6 +472,8 @@ class ANI1x(CDataset):
                 while not nan:  # if empty values break out and del mol
                     data = {}
                     for attr in attributes:
+                        if attr == 'distance':
+                            attr = 'coordinates'
                         if np.isnan(f[mol][attr][()]).any():
                             nan = True
                         else:
@@ -640,18 +654,28 @@ class QM7X(CDataset):
         #datadic[idmol][idconf][feature]
         data = []
         for f in features:
-            _out = np.reshape(mol[f], -1).astype(dtype)
-            if self.pad:
-                #(Nc, Na)    
-                if f in ['atNUM','hVOL','hRAT','cCHG','atC6','atPOL','vdwR']:
-                    out = np.pad(_out, (0, (self.pad - _out.shape[0])))        
-                #(Nc, Na, 3)   
-                elif f in ['atXYZ','totFOR','vdwFOR','pbe0FOR','hVDIP']:
-                    out = np.pad(_out, (0, (self.pad*3 - _out.shape[0])))
-                #(Nc, 9), (Nc, 3), (Nc)
-                else:
-                    out = _out 
-            data.append(out)
+            #(Nc, Na)    
+            if f in ['atNUM','hVOL','hRAT','cCHG','atC6','atPOL','vdwR']:
+                out = np.reshape(mol[f], -1).astype(dtype)
+                if self.pad:
+                    out = np.pad(out, (0, (self.pad - out.shape[0])))        
+            #(Nc, Na, 3)   
+            elif f in ['atXYZ','totFOR','vdwFOR','pbe0FOR','hVDIP']:
+                out = np.reshape(mol[f], -1).astype(dtype)
+                if self.pad:
+                    out = np.pad(out, (0, (self.pad*3 - out.shape[0])))
+            #(Nc, Na, Na)
+            elif f in ['distance']:
+                out = mol['atXYZ']
+                out = sp.distance.squareform(sp.distance.pdist(out))
+                out = np.reshape(out, -1).astype(dtype)
+                if self.pad:
+                    out = np.pad(out, (0, (self.pad*self.pad - out.shape[0])))
+            #(Nc, 9), (Nc, 3), (Nc)
+            else:
+                out = np.reshape(mol[f], -1).astype(dtype)
+                
+        data.append(out)
         if len(data) == 0:
             return data
         else: 
@@ -730,13 +754,28 @@ class QM7(CDataset):
         def get_features(features, dtype):
             data = []
             for f in features:
-                attr = getattr(self, f)
                 if f in ['coulomb']:
+                    attr = getattr(self, f)
                     out = attr[i,:,:]
                 elif f in ['xyz','atoms']:
+                    attr = getattr(self, f)
                     out = attr[i,:]
                 elif f in ['ae']:
+                    attr = getattr(self, f)
                     out = attr[:,i]
+                elif f in ['distance']:
+                    attr = getattr(self, 'xyz')
+                    padded = attr[i,:]
+                    try:
+                        j = np.where(padded == 0)[0][0] #molecule length
+                        xyz = padded[:j,:] #padding removed
+                    except:
+                        xyz = padded #unpadded(longest molecule)
+
+                    out = sp.distance.squareform(sp.distance.pdist(xyz))
+                    out = np.reshape(out, -1).astype(dtype)
+                    out = np.pad(out, (0, 23*23 - out.shape[0]))
+                    
                 data.append(np.reshape(out, -1).astype(dtype))
                 
             if len(data) == 0:
