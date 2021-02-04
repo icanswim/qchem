@@ -482,7 +482,9 @@ class ANI1x(CDataset):
                             structure_count += 1
                     break
                 if nan: 
-                    try: del datadic[mol]
+                    try: 
+                        del datadic[mol]
+                        structure_count -= 1
                     except: pass
         print('structures loaded: ', structure_count)               
         return datadic
@@ -770,7 +772,7 @@ class QM7(CDataset):
                         j = np.where(padded == 0)[0][0] #molecule length
                         xyz = padded[:j,:] #padding removed
                     except:
-                        xyz = padded #unpadded(longest molecule)
+                        xyz = padded #no padding(longest molecule)
 
                     out = sp.distance.squareform(sp.distance.pdist(xyz))
                     out = np.reshape(out, -1).astype(dtype)
