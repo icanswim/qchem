@@ -647,7 +647,7 @@ class QM7X(CDataset):
                 idx.append(QM7X.atomic_n[atom])
             x_cat.append(as_tensor(np.asarray(idx, 'int64')))
             
-        return as_tensor(x_con), x_cat, as_tensor(targets)
+        return as_tensor(x_con), as_tensor(targets), x_cat
          
     def __len__(self):
         return len(self.ds_idx)
@@ -745,7 +745,7 @@ class QM7(CDataset):
     atomic_n = {0:0, 1:1, 6:2, 7:3, 8:4, 16:5}
     
     def __init__(self, features=[], targets=[], embed=[], 
-                     in_file = './data/qm7/qm7.mat'):
+                             in_file = './data/qm7/qm7.mat'):
         
         self.features, self.targets = features, targets
         self.embed = embed
@@ -796,7 +796,7 @@ class QM7(CDataset):
                 idx.append(QM7.atomic_n[atom])
             x_cat.append(as_tensor(np.asarray(idx, 'int64')))
 
-        return as_tensor(x_con), x_cat, as_tensor(targets)
+        return as_tensor(x_con), as_tensor(targets), x_cat
     
     def __len__(self):
         return len(self.ds_idx)
