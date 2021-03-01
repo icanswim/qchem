@@ -1,7 +1,7 @@
 import sys # required for relative imports in jupyter lab
 sys.path.insert(0, '../')
 
-from cosmosis.dataset import *
+from cosmosis.dataset import CDataset
 
 from abc import ABC, abstractmethod
 import os, re, random, h5py, pickle
@@ -215,9 +215,9 @@ class QM9(CDataset):
        
         x_con = self.get_features(mol, self.features, np.float32)
         targets = self.get_features(mol, self.targets, np.float64)
-        x_cat = self.get_features(mol, [self.embed[0][0]], np.int64)
+        embed = self.get_features(mol, [self.embed[0][0]], np.int64)
         
-        return as_tensor(x_con), [as_tensor(x_cat)], as_tensor(targets)
+        return as_tensor(x_con), as_tensor(targets), [as_tensor(embed)]
         
     def get_features(self, mol, features, dtype):
         data = []
@@ -787,7 +787,9 @@ class QM7(CDataset):
         
         x_con = get_features(self.features, np.float32)
         targets = get_features(self.targets, np.float64)
-        molecule = get_features([self.embed[0][0]], np.int64)
+        molecule = []
+        if len(self.embed) > 0:
+            molecule = get_features([self.embed[0][0]], np.int64)
         
         x_cat = []
         if len(molecule) > 0:
@@ -856,7 +858,7 @@ class QM7b(CDataset):
         x_con = get_features(self.features, np.float32)
         targets = get_features(self.targets, np.float64)
 
-        return as_tensor(x_con), [], as_tensor(targets)
+        return as_tensor(x_con), as_tensor(targets), []
     
     def __len__(self):
         return len(self.ds_idx)  
