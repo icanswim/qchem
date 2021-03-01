@@ -439,7 +439,7 @@ class ANI1x(CDataset):
         
         targets = get_features(self.targets, 'float64')
             
-        return as_tensor(x_con), x_cat, as_tensor(targets)
+        return as_tensor(x_con), as_tensor(targets), x_cat
     
     def __len__(self):
         return len(self.ds_idx)
