@@ -13,7 +13,6 @@ from scipy.io import loadmat
 
 from rdkit import Chem
 
-from torch.utils.data import Dataset, IterableDataset, ConcatDataset
 from torch import as_tensor, cat
 
 
