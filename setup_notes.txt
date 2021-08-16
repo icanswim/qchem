@@ -7,7 +7,7 @@ cd qchem
 mkdir data
 mkdir logs
 mkdir models
-conda create --name qchem --file requirements.txt
+conda env create -f environment.yml
 conda activate qchem
 jupyter lab
 
