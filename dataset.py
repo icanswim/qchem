@@ -136,7 +136,7 @@ class QM9(CDataset):
     Dataset source/download:
     https://figshare.com/collections/Quantum_chemistry_structures_and_properties_of_134_kilo_molecules/978904
     
-    Decompress dsgdb9nsd.xyz.tar.bz2 in folder qchem/data/qm9/qm9.xyz
+    Decompress dsgdb9nsd.xyz.tar.bz2 in the 'in_dir' folder (qchem/data/qm9/qm9.xyz)
     
     dsgdb9nsd.xyz.tar.bz2    - 133885 molecules with properties in XYZ-like format
     dsC7O2H10nsd.xyz.tar.bz2 - 6095 isomers of C7O2H10 with properties in XYZ-like format
@@ -284,6 +284,7 @@ class QM9(CDataset):
             for mol in unchar: 
                 try: del datadic[mol]
                 except: continue
+                    
             print('total QM9 molecules created:', len(datadic))
             
             if use_pickle:
@@ -295,12 +296,16 @@ class QM9(CDataset):
     def get_uncharacterized(self, in_file='./data/qm9/uncharacterized.txt'):
         """uncharacterized.txt - 3054 molecules from the 133885 set that failed a 
         consistency check.  Returns a list of ints of the 3054 molecules (datadic keys)"""
-        data = self.open_file(in_file)
         unchar = []
-        for mol in data[8:]:
-            for m in mol.strip().split():
-                if m.isdigit():
-                    unchar.append(int(m))
+        try:
+            data = self.open_file(in_file)
+            for mol in data[8:]:
+                for m in mol.strip().split():
+                    if m.isdigit():
+                        unchar.append(int(m))
+        except:
+            print('uncharaterized file missing...')
+   
         return unchar
         
         
@@ -311,7 +316,7 @@ class ANI1x(CDataset):
     Dataset source/download:
     https://springernature.figshare.com/articles/dataset/ANI-1x_Dataset_Release/10047041
     
-    Place the downloaded h5 file in folder qchem/data/ani1x
+    Place the downloaded h5 file in the 'in_dir' folder (qchem/data/ani1x)
     
     The source dataset is organized:
     [molecular formula][conformation index][feature,feature,...]
@@ -526,8 +531,7 @@ class QM7X(CDataset):
     Dataset source/download:
     https://zenodo.org/record/3905361
     
-    Decompress the .xz files in qchem/data/qm7x/
-    tar xvf *000.xz
+    Decompress the .xz files in the 'in_dir' folder (qchem/data/qm7x/)
     
     1000.hdf5 6.5 GB
     2000.hdf5 8.8 GB
@@ -744,7 +748,7 @@ class QM7(CDataset):
     Dataset source/download:
     http://quantum-machine.org/data/qm7.mat
     
-    Place the downloaded file in folder qchem/data/qm7
+    Place the downloaded file in the 'in_dir' folder (qchem/data/qm7)
     
     This dataset is a subset of GDB-13 (a database of nearly 1 billion stable 
     and synthetically accessible organic molecules) composed of all molecules of 
@@ -834,7 +838,7 @@ class QM7b(CDataset):
     Dataset source/download:
     http://quantum-machine.org/data/qm7b.mat
     
-    Place the downloaded file in folder qchem/data/qm7b
+    Place the downloaded file in the 'in_dir' folder (qchem/data/qm7b)
     
     This dataset is an extension of the QM7 dataset for multitask learning where 13 
     additional properties (e.g. polarizability, HOMO and LUMO eigenvalues, excitation 
