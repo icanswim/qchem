@@ -1,4 +1,4 @@
-# qchem
+# qchem 
 An exploration of the state of the art in the application of datascience to molecular quantum mechanics. 
 
 From Machine Learning for Molecular Simulation  
@@ -13,7 +13,8 @@ From Machine Learning for Molecular Simulation
 
 ## References 
 AlphaFold  
-https://deepmind.com/blog/article/alphafold-a-solution-to-a-50-year-old-grand-challenge-in-biology 
+https://www.nature.com/articles/s41586-021-03819-2  
+https://github.com/deepmind/alphafold 
 
 Deep learning for molecular design - a review of the state of the art  
 https://arxiv.org/abs/1903.04388 
