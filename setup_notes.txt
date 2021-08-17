@@ -1,4 +1,4 @@
-#instructions for setting up folders and conda enviornment
+#instructions for setting up folders and conda environment
 
 ##create a new qchem conda enviornment and folders
 git clone https://github.com/icanswim/cosmosis.git
@@ -30,3 +30,7 @@ conda install -c anaconda h5py
 conda install -c anaconda git
 conda install -c rdkit rdkit
 jupyter lab
+
+##download the source data for the dataset class
+see each dataset class docstring for download and data prep instructions
+

@@ -131,8 +131,13 @@ class QM9Mol(Molecule):
        
     
 class QM9(CDataset):
-    """http://quantum-machine.org/datasets/
-   
+    """http://quantum-machine.org
+    
+    Dataset source/download:
+    https://figshare.com/collections/Quantum_chemistry_structures_and_properties_of_134_kilo_molecules/978904
+    
+    Decompress dsgdb9nsd.xyz.tar.bz2 in folder qchem/data/qm9/qm9.xyz
+    
     dsgdb9nsd.xyz.tar.bz2    - 133885 molecules with properties in XYZ-like format
     dsC7O2H10nsd.xyz.tar.bz2 - 6095 isomers of C7O2H10 with properties in XYZ-like format
     validation.txt           - 100 randomly drawn molecules from the 133885 set with 
@@ -302,7 +307,11 @@ class QM9(CDataset):
 class ANI1x(CDataset):
     """https://www.nature.com/articles/s41597-020-0473-z#Sec11
     https://github.com/aiqm/ANI1x_datasets
+    
+    Dataset source/download:
     https://springernature.figshare.com/articles/dataset/ANI-1x_Dataset_Release/10047041
+    
+    Place the downloaded h5 file in folder qchem/data/ani1x
     
     The source dataset is organized:
     [molecular formula][conformation index][feature,feature,...]
@@ -513,9 +522,11 @@ class QM7X(CDataset):
     """QM7-X: A comprehensive dataset of quantum-mechanical properties spanning 
     the chemical space of small organic molecules
     https://arxiv.org/abs/2006.15139
+    
+    Dataset source/download:
     https://zenodo.org/record/3905361
     
-    decompress the .xz files in qchem/data/qm7x/
+    Decompress the .xz files in qchem/data/qm7x/
     tar xvf *000.xz
     
     1000.hdf5 6.5 GB
@@ -728,7 +739,13 @@ class QM7X(CDataset):
         return datadic                                        
         
 class QM7(CDataset):
-    """http://quantum-machine.org/datasets/
+    """http://quantum-machine.org
+    
+    Dataset source/download:
+    http://quantum-machine.org/data/qm7.mat
+    
+    Place the downloaded file in folder qchem/data/qm7
+    
     This dataset is a subset of GDB-13 (a database of nearly 1 billion stable 
     and synthetically accessible organic molecules) composed of all molecules of 
     up to 23 atoms (including 7 heavy atoms C, N, O, and S), totalling 7165 molecules. 
@@ -812,7 +829,13 @@ class QM7(CDataset):
         
         
 class QM7b(CDataset):
-    """http://quantum-machine.org/datasets/
+    """http://quantum-machine.org
+    
+    Dataset source/download:
+    http://quantum-machine.org/data/qm7b.mat
+    
+    Place the downloaded file in folder qchem/data/qm7b
+    
     This dataset is an extension of the QM7 dataset for multitask learning where 13 
     additional properties (e.g. polarizability, HOMO and LUMO eigenvalues, excitation 
     energies) have to be predicted at different levels of theory (ZINDO, SCS, PBE0, GW). 
