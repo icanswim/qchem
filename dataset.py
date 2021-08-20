@@ -629,10 +629,10 @@ class QM7X(CDataset):
         self.features, self.targets = features, targets 
         self.pad, self.embed, self.in_dir  = pad, embed, in_dir
         self.selector, self.use_h5 = selector, use_h5
-        self.datadic = self.load_data()
+        self.datadic = self.load_data(in_dir, selector, use_h5, features, targets, embed)
         self.ds_idx = list(self.datadic.keys())
         if use_h5:
-            self.h5_handles = self.load_h5()
+            self.h5_handles = self.load_h5(in_dir)
          
     def __getitem__(self, i):
         #if multiple conformations one is randomly selected
@@ -648,7 +648,7 @@ class QM7X(CDataset):
             mol = handle[str(i)][idconf]
             x_con = self.get_features(mol, self.features, 'float32')
             targets = self.get_features(mol, self.targets, 'float64')             
-            molecule = self.get_features(mol, [self.embed[0][0]], 'int64')   
+            molecule = self.get_features(mol, self.embed, 'int64')   
         else:
             x_con = self.datadic[i][idconf]['x_con']
             targets = self.datadic[i][idconf]['targets']
@@ -690,50 +690,55 @@ class QM7X(CDataset):
             #(Nc, 9), (Nc, 3), (Nc)
             else:
                 out = np.reshape(mol[f], -1).astype(dtype)
-                
-        data.append(out)
+                        
+            data.append(out)
+            
         if len(data) == 0:
             return data
         else: 
-            return np.concatenate(data)     
-    
-    def load_h5(self):
+            return np.concatenate(data)
+        
+        
+    def get_embed(self, mol, embed, dtype='int64'):
+        
+        
+    def load_h5(self, in_dir):
         h5_handles = []
         for set_id in QM7X.set_ids:
             handle = h5py.File(self.in_dir+set_id+'.hdf5', 'r')
             h5_handles.append(handle)
         return h5_handles
     
-    def load_data(self):
+    def load_data(self, in_dir, selector, use_h5, features, targets, embed):
         """seletor = list of regular expression strings (attr) for searching 
         and selecting idconf keys.  
         returns datadic[idmol] = [idconf,idconf,...]
-        idconf, ID configuration (e.g., 'Geom-m1-i1-c1-opt', 'Geom-m1-i1-c1-50')
+        idconf = ID configuration (e.g., 'Geom-m1-i1-c1-opt', 'Geom-m1-i1-c1-50')
+        If 'use_h5' = False, the data is loaded into the datadic which uses more
+        memory but is faster.
+        
         """
         datadic = {}
         structure_count = 0
         for set_id in QM7X.set_ids:
-            with h5py.File(self.in_dir+set_id+'.hdf5', 'r') as f:
+            with h5py.File(in_dir+set_id+'.hdf5', 'r') as f:
                 print('mapping... ', f)
                 for idmol in f:
                     datadic[int(idmol)] = {'idconf': []}
                     for idconf in f[idmol]:
-                        for attr in self.selector:
+                        for attr in selector:
                             if re.search(attr, idconf):
                                 datadic[int(idmol)]['idconf'].append(idconf)
                                 structure_count += 1
-                                if not self.use_h5:
+                                if not use_h5:
                                     datadic[int(idmol)][idconf] = {}
-                                    x_con = self.get_features(f[idmol][idconf], 
-                                                              self.features, 'float32')
+                                    x_con = self.get_features(f[idmol][idconf], features, 'float32')
                                     datadic[int(idmol)][idconf]['x_con'] = x_con
 
-                                    targets = self.get_features(f[idmol][idconf], 
-                                                                self.targets, 'float64')
+                                    targets = self.get_features(f[idmol][idconf], targets, 'float64')
                                     datadic[int(idmol)][idconf]['targets'] = targets  
                                     
-                                    x_cat = self.get_features(f[idmol][idconf], 
-                                                              [self.embed[0][0]], 'int64')
+                                    x_cat = self.get_embed(f[idmol][idconf], embed, 'int64')
                                     datadic[int(idmol)][idconf]['x_cat'] = x_cat
                                                           
                     if len(datadic[int(idmol)]['idconf']) == 0: del datadic[int(idmol)]
