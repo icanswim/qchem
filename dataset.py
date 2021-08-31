@@ -761,80 +761,47 @@ class QM7(CDataset):
     hybrid functional (PBE0). This dataset features a large variety of molecular structures 
     such as double and triple bonds, cycles, carboxy, cyanide, amide, alcohol and epoxy.
     
+    coulomb = qm7['X'] # (7165, 23, 23)
+    xyz = qm7['R'] # (7165, 3)
+    atoms = qm7['Z'] # (7165, 23)
+    ae = qm7['T'] # (1, 7165) atomization energy
+    
     Prediction of the Atomization Energy of Molecules Using Coulomb Matrix and Atomic
     Composition in a Bayesian Regularized Neural Networks
     https://arxiv.org/abs/1904.10321
     """
-    atomic_n = {0:0, 1:1, 6:2, 7:3, 8:4, 16:5}
-    
-    def __init__(self, features=[], targets=[], embeds=[], 
-                             in_file = './data/qm7/qm7.mat'):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         
-        self.features, self.targets = features, targets
-        self.embeds = embeds
-        self.load_data(in_file)
-        
-    def __getitem__(self, i):
-        
-        def get_features(features, dtype):
-            data = []
-            for f in features:
+    def load_data(self, in_file = './data/qm7/qm7.mat'):
+        ds = loadmat(in_file)
+        datadic = {}
+        for i in range(7165):
+            datadic[i] = {}
+            for f in self.features+self.embeds+self.targets:
                 if f in ['coulomb']:
-                    attr = getattr(self, f)
-                    out = attr[i,:,:]
-                elif f in ['xyz','atoms']:
-                    attr = getattr(self, f)
-                    out = attr[i,:]
+                    datadic[i].update({f: ds['X'][i,:,:]})
+                elif f in ['xyz']:
+                    datadic[i].update({f: ds['R'][i,:]})
+                #convert categories(atomic numbers) to strings so they can be used as keys    
+                elif f in ['atoms']: 
+                    datadic[i].update({f: list(map(str, map(int, ds['Z'][i,:])))})    
                 elif f in ['ae']:
-                    attr = getattr(self, f)
-                    out = attr[:,i]
+                    datadic[i].update({f: ds['T'][:,i]})
                 elif f in ['distance']:
-                    attr = getattr(self, 'xyz')
-                    padded = attr[i,:]
+                    padded = ds['R'][i,:]
                     try:
                         j = np.where(padded == 0)[0][0] #molecule length
                         xyz = padded[:j,:] #padding removed
                     except:
-                        xyz = padded #no padding(longest molecule)
-
+                        xyz = padded #no padding (longest molecule)
                     out = sp.distance.squareform(sp.distance.pdist(xyz))
-                    out = np.reshape(out, -1).astype(dtype)
-                    out = np.pad(out, (0, 23*23 - out.shape[0]))
+                    out = np.pad(out, ((0, 23-out.shape[0]), (0, 23-out.shape[1])))
+                    datadic[i].update({f: out})
                     
-                data.append(np.reshape(out, -1).astype(dtype))
-                
-            if len(data) == 0:
-                return data
-            else: 
-                return np.concatenate(data)
-        
-        X = get_features(self.features, np.float32)
-        y = get_features(self.targets, np.float64)
-        
-        molecule = []
-        if len(self.embeds) > 0:
-            molecule = get_features([self.embeds[0][0]], np.int64)
-        
-        embed_idx = []
-        if len(molecule) > 0:
-            idx = []
-            for atom in molecule:
-                idx.append(QM7.atomic_n[atom])
-            embed_idx.append(as_tensor(np.asarray(idx, 'int64')))
-
-        return X, embed_idx, y
-    
-    def __len__(self):
-        return len(self.ds_idx)
-    
-    def load_data(self, in_file):
-        qm7 = loadmat(in_file)
-        self.coulomb = qm7['X'] # (7165, 23, 23)
-        self.xyz = qm7['R'] # (7165, 3)
-        self.atoms = qm7['Z'] # (7165, 23)
-        self.ae = qm7['T'] # (1, 7165) atomization energy
-        self.ds_idx = list(range(7165))
-        
+        self.embed_lookup = {'0':0, '1':1, '6':2, '7':3, '8':4, '16':5} #atomic numbers
+        self.ds_idx = list(datadic.keys())
+        return datadic
         
 class QM7b(CDataset):
     """http://quantum-machine.org
