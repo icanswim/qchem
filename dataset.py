@@ -773,21 +773,21 @@ class QM7(CDataset):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         
-    def load_data(self, in_file = './data/qm7/qm7.mat'):
+    def load_data(self, flatten=True, in_file = './data/qm7/qm7.mat'):
         ds = loadmat(in_file)
         datadic = {}
         for i in range(7165):
             datadic[i] = {}
             for f in self.features+self.embeds+self.targets:
                 if f in ['coulomb']:
-                    datadic[i].update({f: ds['X'][i,:,:]})
+                    out = ds['X'][i,:,:]
                 elif f in ['xyz']:
-                    datadic[i].update({f: ds['R'][i,:]})
+                    out = ds['R'][i,:]
                 #convert categories(atomic numbers) to strings so they can be used as keys    
                 elif f in ['atoms']: 
-                    datadic[i].update({f: list(map(str, map(int, ds['Z'][i,:])))})    
+                    out = list(map(str, map(int, ds['Z'][i,:])))  
                 elif f in ['ae']:
-                    datadic[i].update({f: ds['T'][:,i]})
+                    out = ds['T'][:,i]
                 elif f in ['distance']:
                     padded = ds['R'][i,:]
                     try:
@@ -797,7 +797,9 @@ class QM7(CDataset):
                         xyz = padded #no padding (longest molecule)
                     out = sp.distance.squareform(sp.distance.pdist(xyz))
                     out = np.pad(out, ((0, 23-out.shape[0]), (0, 23-out.shape[1])))
-                    datadic[i].update({f: out})
+                    
+                if flatten: out = np.reshape(out, -1)
+                datadic[i].update({f: out})
                     
         self.embed_lookup = {'0':0, '1':1, '6':2, '7':3, '8':4, '16':5} #atomic numbers
         self.ds_idx = list(datadic.keys())
