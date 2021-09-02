@@ -618,103 +618,64 @@ class QM7X(CDataset):
                 'eNN','ePBE0','ePBE0+MBD','eTS','eX','eXC','eXX','hCHG', 
                 'hDIP','hRAT','hVDIP','hVOL','mC6','mPOL','mTPOL','pbe0FOR', 
                 'sMIT','sRMSD','totFOR','vDIP','vEQ','vIQ','vTQ','vdwFOR','vdwR']
-    
-    atomic_n = {0:0, 1:1, 6:2, 7:3, 8:4, 9:5, 15:6, 16:7, 17:8}
-    
-    def __init__(self, features=['atXYZ'], targets=['eAT'], pad=None, 
-                         in_dir='./data/qm7x/', selector=['i1-c1-opt'],
-                            embeds=[('atNUM',6,16,0,True)], use_h5=True):
         
-        self.features, self.targets = features, targets 
-        self.pad, self.embeds, self.in_dir  = pad, embeds, in_dir
-        self.selector, self.use_h5 = selector, use_h5
-        self.datadic = self.load_data(in_dir, selector, use_h5, features, targets, embeds)
-        self.ds_idx = list(self.datadic.keys())
-        if use_h5:
-            self.h5_handles = self.load_h5(in_dir)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)            
          
     def __getitem__(self, i):
+        X, embed_idx, y = [], [], []
         #if multiple conformations one is randomly selected
-        conformations = self.datadic[i]['idconf']
+        conformations = list(self.ds[i].keys())
         idconf = random.choice(conformations)
-
-        if self.use_h5:
-            #select the correct h5 handle
-            if i == 1: j = 1
-            else: j = i-1
-            k = j // 1000  
-            handle = self.h5_handles[k]
-            mol = handle[str(i)][idconf]
-            X = self.get_features(mol, self.features, 'float32')
-            y = self.get_features(mol, self.targets, 'float64')             
-            molecule = self.get_features(mol, self.embeds, 'int64')   
-        else:
-            X = self.datadic[i][idconf]['X']
-            y = self.datadic[i][idconf]['targets']
-            molecule = self.datadic[i][idconf]['embeds']
-            
-        embed_idx = []
-        if len(molecule) > 0:
-            idx = []
-            for atom in molecule:
-                idx.append(QM7X.atomic_n[atom])
-            embed_idx.append(as_tensor(np.asarray(idx, 'int64')))
+        
+        if len(self.features) > 0:
+            X = self._get_features(self.ds[i][idconf], self.features)
+        for transform in self.transform:
+                X = transform(X)
+        
+        if len(self.embeds) > 0:
+            embed_idx = self._get_embed_idx(self.ds[i][idconf], self.embeds, self.embed_lookup)
+        
+        if len(self.targets) > 0:
+            y = self._get_features(self.ds[i][idconf], self.targets)
+        for transform in self.target_transform:
+            y = transform(y)
             
         return X, embed_idx, y
-         
-    def __len__(self):
-        return len(self.ds_idx)
         
-    def get_features(self, mol, features, dtype):
-        #datadic[idmol][idconf][feature]
-        data = []
+    def _load_features(self, mol, features, pad):
+        datadic = {}
         for f in features:
             #(Nc, Na)    
             if f in ['atNUM','hVOL','hRAT','cCHG','atC6','atPOL','vdwR']:
-                out = np.reshape(mol[f], -1).astype(dtype)
-                if self.pad:
-                    out = np.pad(out, (0, (self.pad - out.shape[0])))        
+                out = np.reshape(mol[f], -1).astype('float32')
+                if pad is not None:
+                    out = np.pad(out, (0, (pad - out.shape[0])))        
             #(Nc, Na, 3)   
             elif f in ['atXYZ','totFOR','vdwFOR','pbe0FOR','hVDIP']:
-                out = np.reshape(mol[f], -1).astype(dtype)
-                if self.pad:
+                out = np.reshape(mol[f], -1).astype('float32')
+                if pad is not None:
                     out = np.pad(out, (0, (self.pad*3 - out.shape[0])))
             #(Nc, Na, Na)
             elif f in ['distance']:
                 out = mol['atXYZ']
                 out = sp.distance.squareform(sp.distance.pdist(out))
-                out = np.reshape(out, -1).astype(dtype)
-                if self.pad:
-                    out = np.pad(out, (0, (self.pad*self.pad - out.shape[0])))
+                out = np.reshape(out, -1).astype('float32')
+                if pad is not None:
+                    out = np.pad(out, (0, (pad*pad - out.shape[0])))
             #(Nc, 9), (Nc, 3), (Nc)
             else:
-                out = np.reshape(mol[f], -1).astype(dtype)
+                out = np.reshape(mol[f], -1).astype('float32')
                         
-            data.append(out)
-            
-        if len(data) == 0:
-            return data
-        else: 
-            return np.concatenate(data)
+            datadic[f] = out
+        return datadic
         
-    def get_embeds(self, mol, embeds, dtype='int64'):
-        pass
-        
-    def load_h5(self, in_dir):
-        h5_handles = []
-        for set_id in QM7X.set_ids:
-            handle = h5py.File(self.in_dir+set_id+'.hdf5', 'r')
-            h5_handles.append(handle)
-        return h5_handles
-    
-    def load_data(self, in_dir, selector, use_h5, features, targets, embeds):
+    def load_data(self, selector, pad=None, in_dir='./data/qm7x/'):
         """seletor = list of regular expression strings (attr) for searching 
         and selecting idconf keys.  
-        returns datadic[idmol] = [idconf,idconf,...]
+        returns datadic[idmol] = {'idconf': {'feature': val}}
         idconf = ID configuration (e.g., 'Geom-m1-i1-c1-opt', 'Geom-m1-i1-c1-50')
-        If 'use_h5' = False, the data is loaded into the datadic which uses more
-        memory but is faster.
-        
+        datadic[idmol][idconf][feature]
         """
         datadic = {}
         structure_count = 0
@@ -722,25 +683,17 @@ class QM7X(CDataset):
             with h5py.File(in_dir+set_id+'.hdf5', 'r') as f:
                 print('mapping... ', f)
                 for idmol in f:
-                    datadic[int(idmol)] = {'idconf': []}
+                    datadic[int(idmol)] = {}
                     for idconf in f[idmol]:
                         for attr in selector:
                             if re.search(attr, idconf):
-                                datadic[int(idmol)]['idconf'].append(idconf)
                                 structure_count += 1
-                                if not use_h5:
-                                    datadic[int(idmol)][idconf] = {}
-                                    x_con = self.get_features(f[idmol][idconf], features, 'float32')
-                                    datadic[int(idmol)][idconf]['X'] = x_con
-
-                                    targets = self.get_features(f[idmol][idconf], targets, 'float64')
-                                    datadic[int(idmol)][idconf]['targets'] = targets  
-                                    
-                                    x_cat = self.get_embeds(f[idmol][idconf], embeds, 'int64')
-                                    datadic[int(idmol)][idconf]['embeds'] = x_cat
-                                                          
-                    if len(datadic[int(idmol)]['idconf']) == 0: del datadic[int(idmol)]
-                    
+                                features = self._load_features(f[idmol][idconf], 
+                                                               self.features+self.targets+self.embeds,
+                                                               pad=pad)
+                                datadic[int(idmol)][idconf] = features
+                                                           
+        self.embed_lookup = {0:0, 1:1, 6:2, 7:3, 8:4, 9:5, 15:6, 16:7, 17:8}          
         print('molecular formula (idmol) mapped: ', len(datadic))
         print('total molecular structures (idconf) mapped: ', structure_count)
         return datadic                                        
@@ -783,9 +736,8 @@ class QM7(CDataset):
                     out = ds['X'][i,:,:]
                 elif f in ['xyz']:
                     out = ds['R'][i,:]
-                #convert categories(atomic numbers) to strings so they can be used as keys    
                 elif f in ['atoms']: 
-                    out = list(map(str, map(int, ds['Z'][i,:])))  
+                    out = list(map(int, ds['Z'][i,:]))  
                 elif f in ['ae']:
                     out = ds['T'][:,i]
                 elif f in ['distance']:
@@ -801,7 +753,7 @@ class QM7(CDataset):
                 if flatten: out = np.reshape(out, -1)
                 datadic[i].update({f: out})
                     
-        self.embed_lookup = {'0':0, '1':1, '6':2, '7':3, '8':4, '16':5} #atomic numbers
+        self.embed_lookup = {0:0, 1:1, 6:2, 7:3, 8:4, 16:5} #atomic numbers
         self.ds_idx = list(datadic.keys())
         return datadic
         
