@@ -693,7 +693,7 @@ class QM7X(CDataset):
                                                                pad=pad)
                                 datadic[int(idmol)][idconf] = features
                                                            
-        self.embed_lookup = {0:0, 1:1, 6:2, 7:3, 8:4, 9:5, 15:6, 16:7, 17:8}          
+        self.embed_lookup = {0:0, 1:1, 6:2, 7:3, 8:4, 9:5, 15:6, 16:7, 17:8}
         print('molecular formula (idmol) mapped: ', len(datadic))
         print('total molecular structures (idconf) mapped: ', structure_count)
         return datadic                                        
@@ -754,7 +754,6 @@ class QM7(CDataset):
                 datadic[i].update({f: out})
                     
         self.embed_lookup = {0:0, 1:1, 6:2, 7:3, 8:4, 16:5} #atomic numbers
-        self.ds_idx = list(datadic.keys())
         return datadic
         
 class QM7b(CDataset):
@@ -801,7 +800,6 @@ class QM7b(CDataset):
                 else:
                     NotImplemented("feature oob")
                     
-        self.ds_idx = list(datadic.keys())
         return datadic
                 
           
