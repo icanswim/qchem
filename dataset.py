@@ -605,11 +605,15 @@ class QM7X(CDataset):
     -'atPOL': Atomic polarizabilities [bohr^3] (N)
     -'vdwR': van der Waals radii [bohr] (N)
     
+    'distance': N x N distance matric created from atXYZ 
+    
     seletor = list of regular expression strings (attr) for searching 
-        and selecting idconf keys.  
-        returns datadic[idmol] = [idconf,idconf,...]
+        and selecting idconf keys.
         idconf, ID configuration (e.g., 'Geom-m1-i1-c1-opt', 'Geom-m1-i1-c1-50')
-         
+    flatten = True/False 
+    pad = None/int (pad length int in the Na (number of atoms) dimension)
+    
+    returns datadic[idmol][idconf][features]
     """
     set_ids = ['1000','2000','3000','4000','5000','6000','7000','8000']
     
@@ -617,7 +621,8 @@ class QM7X(CDataset):
                 'eC','eDFTB+MBD','eEE','eH','eKIN','eKSE','eL','eMBD','eNE', 
                 'eNN','ePBE0','ePBE0+MBD','eTS','eX','eXC','eXX','hCHG', 
                 'hDIP','hRAT','hVDIP','hVOL','mC6','mPOL','mTPOL','pbe0FOR', 
-                'sMIT','sRMSD','totFOR','vDIP','vEQ','vIQ','vTQ','vdwFOR','vdwR']
+                'sMIT','sRMSD','totFOR','vDIP','vEQ','vIQ','vTQ','vdwFOR','vdwR',
+                'distance']
         
     def __init__(self, **kwargs):
         super().__init__(**kwargs)            
@@ -643,34 +648,39 @@ class QM7X(CDataset):
             
         return X, embed_idx, y
         
-    def _load_features(self, mol, features, pad):
+    def _load_features(self, mol, features, flatten, pad):        
+        def _pad(out):    
+            if pad is not None:
+                #(Nc, Na)    
+                if f in ['atNUM','hVOL','hRAT','cCHG','atC6','atPOL','vdwR']:
+                    out = np.pad(out, (0, (pad - out.shape[0])))
+                #(Nc, Na, 3)
+                elif f in ['atXYZ','totFOR','vdwFOR','pbe0FOR','hVDIP']:
+                    out = np.pad(out, ((0, (pad - out.shape[0])), (0, 0)))
+                #(Nc, Na, Na)
+                elif f in ['distance']:
+                    out = np.pad(out, (0, (pad - out.shape[0])))
+                #(Nc, 9), (Nc, 3), (Nc) no padding
+            return out
+        
         datadic = {}
         for f in features:
-            #(Nc, Na)    
-            if f in ['atNUM','hVOL','hRAT','cCHG','atC6','atPOL','vdwR']:
-                out = np.reshape(mol[f], -1).astype('float32')
-                if pad is not None:
-                    out = np.pad(out, (0, (pad - out.shape[0])))        
-            #(Nc, Na, 3)   
-            elif f in ['atXYZ','totFOR','vdwFOR','pbe0FOR','hVDIP']:
-                out = np.reshape(mol[f], -1).astype('float32')
-                if pad is not None:
-                    out = np.pad(out, (0, (self.pad*3 - out.shape[0])))
-            #(Nc, Na, Na)
-            elif f in ['distance']:
-                out = mol['atXYZ']
+            if f == 'distance': 
+                out = mol['atXYZ'][()]
                 out = sp.distance.squareform(sp.distance.pdist(out))
-                out = np.reshape(out, -1).astype('float32')
-                if pad is not None:
-                    out = np.pad(out, (0, (pad*pad - out.shape[0])))
-            #(Nc, 9), (Nc, 3), (Nc)
-            else:
-                out = np.reshape(mol[f], -1).astype('float32')
-                        
-            datadic[f] = out
+                out = _pad(out)
+                if flatten:
+                    out = np.reshape(out, -1)
+                datadic[f] = out.astype('float32')
+            else: 
+                out = mol[f][()]
+                out = _pad(out)
+                if flatten: 
+                    out = np.reshape(out, -1)
+                datadic[f] = out.astype('float32')
         return datadic
         
-    def load_data(self, selector, pad=None, in_dir='./data/qm7x/'):
+    def load_data(self, selector, flatten=True, pad=None, in_dir='./data/qm7x/'):
         """seletor = list of regular expression strings (attr) for searching 
         and selecting idconf keys.  
         returns datadic[idmol] = {'idconf': {'feature': val}}
@@ -690,6 +700,7 @@ class QM7X(CDataset):
                                 structure_count += 1
                                 features = self._load_features(f[idmol][idconf], 
                                                                self.features+self.targets+self.embeds,
+                                                               flatten=flatten,
                                                                pad=pad)
                                 datadic[int(idmol)][idconf] = features
                                                            
