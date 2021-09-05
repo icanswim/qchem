@@ -387,76 +387,86 @@ class ANI1x(CDataset):
                 'wb97x_tz.mbis_charges', 'wb97x_tz.mbis_dipoles', 'wb97x_tz.mbis_octupoles',
                 'wb97x_tz.mbis_quadrupoles', 'wb97x_tz.mbis_volumes']
     
-    atomic_n = {0:0, 1:1, 6:2, 7:3, 8:4, 9:5}
     
-    def __init__(self, features=['distance'], targets=[], pad=63,
-                 embeds=[('atomic_numbers',9,16,0,True)], criterion=None, 
-                 conformation='random', in_file='./data/ani1x/ani1x-release.h5'):
+    def __init__(self, criterion=[], conformation='random', **kwargs):
+        self.criterion = criterion
+        self.conformation = conformation
+        super().__init__(**kwargs)
         
-        self.features, self.targets = features, targets
-        self.pad, self.embeds, self.in_file  = pad, embeds, in_file
-        self.conformation, self.criterion = conformation, criterion
+    def _get_features(self, datadic, features):
+        ci = self._get_conformation_index(datadic)
+        data = []
+        for f in features:
+            if f == 'atomic_numbers':
+                out = datadic[f]
+            elif f == 'distance':
+                out = sp.distance.squareform(sp.distance.pdist(datadic[f][ci]))
+                if self.pad is not None:
+                    out = np.pad(out, (0, ((pad - out.shape[0])), (pad - out.shape[1]), (0, 0)))
+            else:
+                out = datadic[f][ci]
+            if out.ndim == 0:
+                out = np.reshape(out, -1)
+            data.append(out)
+            
+        return np.concatenate(data)
+        
+    def _get_conformation_index(self, datadic):
+        """each molecular formula (mol) may have many different isomers
+        select the conformation based on some criterion (attribute value)
+        """
+        if len(self.criterion) == 0:
+            self.criterion = list(self.targets[0])
 
-        self.datadic = self.load_data()
-        self.ds_idx = list(self.datadic.keys())
+        ci = 0        
+        if isinstance(self.conformation, int):
+            ci = self.conformation
+        elif self.conformation == 'random':
+            ci = random.randrange(datadic[self.criterion[0]].shape[0])
+        elif self.conformation == 'max':
+            ci = np.argmax(datadic[self.criterion[0]], axis=0)
+        elif self.conformation == 'min':
+            ci = np.argmin(datadic[self.criterion[0]], axis=0)
+       
+        return ci
     
-    def __getitem__(self, i):
-        ci = self.get_conformation_index(self.datadic[i])
-        
-        def get_features(features, dtype):
-            data = []
+    def _load_features(self, mol, features, flatten, pad, dtype='float32'):
+        datadic = {}
+        nan = False
+        while not nan:
             for f in features:
-                #(Na)
-                if f in ['atomic_numbers']:
-                    out = np.reshape(self.datadic[i][f], -1).astype(dtype)
-                    if self.pad:
-                        out = np.pad(out, (0, (self.pad - out.shape[0])))          
-                #(Nc, Na)    
-                elif f in ['wb97x_dz.cm5_charges','wb97x_dz.hirshfeld_charges',
-                           'wb97x_tz.mbis_charges','wb97x_tz.mbis_dipoles',
-                           'wb97x_tz.mbis_quadrupoles','wb97x_tz.mbis_octupoles',
-                           'wb97x_tz.mbis_volumes']:
-                    out = np.reshape(self.datadic[i][f][ci], -1).astype(dtype)
-                    if self.pad:
-                        out = np.pad(out, (0, (self.pad - out.shape[0])))        
-                #(Nc, Na, 3)   
-                elif f in ['coordinates','wb97x_dz.forces','wb97x_dz.forces']:
-                    out = np.reshape(self.datadic[i][f][ci], -1).astype(dtype)
-                    if self.pad:
-                        out = np.pad(out, (0, (self.pad*3 - out.shape[0])))
-                #(Na, Na)
-                elif f in ['distance']:
-                    out = self.datadic[i]['coordinates'][ci]
-                    out = sp.distance.squareform(sp.distance.pdist(out))
-                    out = np.reshape(out, -1).astype(dtype)
-                    if self.pad:
-                        out = np.pad(out, (0, (self.pad*self.pad - out.shape[0])))
-                #(Nc, 6), (Nc, 3), (Nc)
-                else:
-                    out = np.reshape(self.datadic[i][f][ci], -1).astype(dtype)   
-                data.append(out)
-            if len(data) == 0:
-                return data
-            else: 
-                return np.concatenate(data)
-            
-        embed_idx = []
-        if len(self.embeds) > 0:
-            molecule = get_features([self.embeds[0][0]], 'int64')
-            idx = []
-            for atom in molecule:
-                idx.append(ANI1x.atomic_n[atom])
-            embed_idx.append(as_tensor(np.asarray(idx, 'int64')))
-            
-        X = get_features(self.features, 'float32')
-        y = get_features(self.targets, 'float64')
-            
-        return X, embed_idx, y
-    
-    def __len__(self):
-        return len(self.ds_idx)
-    
-    def load_data(self):
+                if f == 'distance': 
+                    out = mol['coordinates'][()]
+                else: 
+                    out = mol[f][()]
+                    
+                if np.isnan(out).any(): 
+                    nan = True
+                    
+                if pad is not None:
+                    #(Na)
+                    if f in ['atomic_numbers']:
+                        out = np.pad(out, (0, (self.pad - out.shape[0])), (0, 0))
+                    #(Na, Nc)    
+                    elif f in ['wb97x_dz.cm5_charges','wb97x_dz.hirshfeld_charges',
+                               'wb97x_tz.mbis_charges','wb97x_tz.mbis_dipoles',
+                               'wb97x_tz.mbis_quadrupoles','wb97x_tz.mbis_octupoles',
+                               'wb97x_tz.mbis_volumes']:
+                        out = np.pad(out, (0, (self.pad - out.shape[0])), (0, 0))
+                    #(Na, Nc, 3)   
+                    elif f in ['coordinates','wb97x_dz.forces','wb97x_dz.forces']:
+                        out = np.pad(out, (0, ((pad - out.shape[0])), (0, 0), (0, 0)))
+                    #(Nc, 6), (Nc, 3), (Nc) no padding
+                    
+                if flatten: 
+                    out = np.reshape(out, -1)
+
+                datadic[f] = out.astype(dtype)
+            return datadic, nan #returns datadic, nan=False
+        return datadic, nan #breaks out returns datadic, nan=True
+                    
+               
+    def load_data(self, flatten=False, pad=None, in_file='./data/ani1x/ani1x-release.h5'):
         """data_keys = ['wb97x_dz.energy','wb97x_dz.forces'] 
         # Original ANI-1x data (https://doi.org/10.1063/1.5023802)
         data_keys = ['wb97x_tz.energy','wb97x_tz.forces'] 
@@ -470,57 +480,24 @@ class ANI1x(CDataset):
         ragged dataset each mol has all keys and nan for missing values
         throws out the mol if any of the feature values or criterion feature values are missing
         """
-        structure_count = 0
-        if len(self.embeds) > 0:
-            attributes = self.features+self.targets+[self.embeds[0][0]]
-        else:
-            attributes = self.features+self.targets
-        if self.criterion != None and self.criterion not in attributes:
-            attributes.append(self.criterion)
         datadic = {}
-        with h5py.File(self.in_file, 'r') as f:
+        with h5py.File(in_file, 'r') as f:
             for mol in f.keys():
-                nan = False
-                while not nan:  # if empty values break out and del mol
-                    data = {}
-                    for attr in attributes:
-                        if attr == 'distance':
-                            attr = 'coordinates'
-                        if np.isnan(f[mol][attr][()]).any():
-                            nan = True
-                        else:
-                            data[attr] = f[mol][attr][()]
-                            datadic[mol] = data
-                            structure_count += 1
-                    break
-                if nan: 
-                    try: 
-                        del datadic[mol]
-                        structure_count -= 1
-                    except: pass
-        print('structures loaded: ', structure_count)               
-        return datadic
-    
-    def get_conformation_index(self, mol):
-        """each molecular formula (mol) may have many different isomers
-        select the conformation based on some criterion (attribute value)
-        """
-        if self.criterion == None:
-            criterion = self.targets[0]
-        else:
-            criterion = self.criterion
-            
-        ci = 0        
-        if isinstance(self.conformation, int):
-            ci = self.conformation
-        elif self.conformation == 'random':
-            ci = random.randrange(mol[criterion].shape[0])
-        elif self.conformation == 'max':
-            ci = np.argmax(mol[criterion], axis=0)
-        elif self.conformation == 'min':
-            ci = np.argmin(mol[criterion], axis=0)
-        
-        return ci
+                features, nan = self._load_features(f[mol], 
+                                                    self.criterion+self.features+\
+                                                    self.embeds+self.targets, 
+                                                    flatten=flatten, 
+                                                    pad=pad)
+                if nan:
+                    del datadic[mol]
+                else:
+                    datadic[mol] = features
+                if len(datadic) % 100 == 0:
+                    print('molecules loaded: ', len(datadic))
+        print('molecules loaded: ', len(datadic))
+        self.pad = pad
+        return datadic    
+
                 
 class QM7X(CDataset):
     """QM7-X: A comprehensive dataset of quantum-mechanical properties spanning 
@@ -605,7 +582,7 @@ class QM7X(CDataset):
     -'atPOL': Atomic polarizabilities [bohr^3] (N)
     -'vdwR': van der Waals radii [bohr] (N)
     
-    'distance': N x N distance matric created from atXYZ 
+    'distance': N x N distance matrix created from atXYZ 
     
     seletor = list of regular expression strings (attr) for searching 
         and selecting idconf keys.
@@ -648,39 +625,33 @@ class QM7X(CDataset):
             
         return X, embed_idx, y
         
-    def _load_features(self, mol, features, flatten, pad):        
-        def _pad(out):    
-            if pad is not None:
-                #(Nc, Na)    
-                if f in ['atNUM','hVOL','hRAT','cCHG','atC6','atPOL','vdwR']:
-                    out = np.pad(out, (0, (pad - out.shape[0])))
-                #(Nc, Na, 3)
-                elif f in ['atXYZ','totFOR','vdwFOR','pbe0FOR','hVDIP']:
-                    out = np.pad(out, ((0, (pad - out.shape[0])), (0, 0)))
-                #(Nc, Na, Na)
-                elif f in ['distance']:
-                    out = np.pad(out, (0, (pad - out.shape[0])))
-                #(Nc, 9), (Nc, 3), (Nc) no padding
-            return out
+    def _load_features(self, mol, features, flatten, pad, dtype='float32'):
         
         datadic = {}
         for f in features:
             if f == 'distance': 
                 out = mol['atXYZ'][()]
                 out = sp.distance.squareform(sp.distance.pdist(out))
-                out = _pad(out)
-                if flatten:
-                    out = np.reshape(out, -1)
-                datadic[f] = out.astype('float32')
             else: 
                 out = mol[f][()]
-                out = _pad(out)
-                if flatten: 
-                    out = np.reshape(out, -1)
-                datadic[f] = out.astype('float32')
+                
+            if pad is not None:
+                #(Nc, Na), (Nc, Na, Na)  
+                if f in ['atNUM','hVOL','hRAT','cCHG','atC6','atPOL','vdwR','distance']:
+                    out = np.pad(out, (0, (pad - out.shape[0])))
+                #(Nc, Na, 3)
+                elif f in ['atXYZ','totFOR','vdwFOR','pbe0FOR','hVDIP']:
+                    out = np.pad(out, ((0, (pad - out.shape[0])), (0, 0)))
+                #(Nc, 9), (Nc, 3), (Nc) no padding
+ 
+            if flatten: 
+                out = np.reshape(out, -1)
+                
+            datadic[f] = out.astype(dtype)
+            
         return datadic
         
-    def load_data(self, selector, flatten=True, pad=None, in_dir='./data/qm7x/'):
+    def load_data(self, selector='opt', flatten=False, pad=None, in_dir='./data/qm7x/'):
         """seletor = list of regular expression strings (attr) for searching 
         and selecting idconf keys.  
         returns datadic[idmol] = {'idconf': {'feature': val}}
