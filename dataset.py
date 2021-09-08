@@ -37,7 +37,7 @@ class Molecule(ABC):
     def load_data(self):
         self.smile = '' 
         self.n_atoms = 0    
-        self.xyz = []  # [['atom_type',x,y,z],...]
+        self.xyz = []  #[['atom_type',x,y,z],...]
         
     def open_file(self, in_file):
         with open(in_file) as f:
@@ -93,7 +93,7 @@ class Molecule(ABC):
         norm = np.linalg.norm(matrix, axis=1)
         noised = np.random.normal(norm, sigma)
         indexlist = np.argsort(noised)
-        indexlist = indexlist[::-1]  # invert
+        indexlist = indexlist[::-1]  #invert
         return matrix[indexlist][:,indexlist]
     
 class QM9Mol(Molecule):
@@ -114,13 +114,13 @@ class QM9Mol(Molecule):
         self.smile = xyz[-2]
         self.n_atoms = int(xyz[0])
         
-        properties = xyz[1].strip().split('\t')[1:] # [float,...]
+        properties = xyz[1].strip().split('\t')[1:] #[float,...]
         for i, p in enumerate(properties):
-            setattr(self, QM9Mol.properties[i], p)
+            setattr(self, QM9Mol.properties[i], np.reshape(np.asarray(p, 'float32'), -1))
             
         self.xyz = []
         for atom in xyz[2:self.n_atoms+2]:
-            self.xyz.append(atom.strip().split('\t')) # [['atom_type',x,y,z,mulliken],...]
+            self.xyz.append(atom.strip().split('\t')) #[['atom_type',x,y,z,mulliken],...]
             
         self.mulliken = []
         for atom in self.xyz:
@@ -185,6 +185,11 @@ class QM9(CDataset):
     https://arxiv.org/abs/1908.00971
     Physical machine learning outperforms "human learning" in Quantum Chemistry
     
+    pad = length of longest molecule that all molecules will be padded to
+    features/target = QM9.properties,'coulomb','mulliken','adjacency',QM9Mol.attr
+    filter_on = ('attr', 'test', 'value')
+    n = non random subset selection (for testing)
+    use_pickle = False/'qm9_datadic.p' (if file exists loads, if not creates and saves)
     """
     LOW_CONVERGENCE = [21725,87037,59827,117523,128113,129053,129152, 
                        129158,130535,6620,59818]
@@ -192,59 +197,26 @@ class QM9(CDataset):
     properties = ['A','B','C','mu','alpha','homo','lumo', 
                   'gap','r2','zpve','U0','U','H','G','Cv']
     
-    def __init__(self, 
-                 in_dir='./data/qm9/qm9.xyz/', 
-                 n=133885, 
-                 features=[],
-                 embeds=[],
-                 targets=[], 
-                 pad=29,
-                 filter_on=False,
-                 use_pickle='qm9_datadic.p'):
-        """pad = length of longest molecule that all molecules will be padded to
-        features/target = QM9.properties,'coulomb','mulliken','adjacency',QM9Mol.attr
-        filter_on = ('attr', 'test', 'value')
-        n = non random subset selection (for testing)
-        embeds=[('feature',voc,vec,padding_idx,param.requires_grad)] 
-        use_pickle = False/'qm9_datadic.p' (if file exists loads, if not creates and saves)
-        """
-        self.features, self.targets, self.pad = features, targets, pad
-        self.datadic = self.load_data(in_dir, n, filter_on, use_pickle)
-        self.ds_idx = list(self.datadic.keys())
-        self.embeds = embeds 
-    
-    def __getitem__(self, i):
-        
-        mol = self.datadic[i]
-       
-        X = self.get_features(mol, self.features, np.float32)
-        y = self.get_features(mol, self.targets, np.float64)
-        embed_idx = self.get_features(mol, [self.embeds[0][0]], np.int64)
-        
-        return X, embed_idx, y
-        
-    def get_features(self, mol, features, dtype):
+    def __init__(self, pad=None, flatten=False, **kwargs):
+        self.pad = pad
+        self.flatten = flatten
+        super().__init__(**kwargs)
+         
+    def _get_features(self, mol, features):
         data = []
-        for feature in features:
-            flat = np.reshape(np.asarray(getattr(mol, feature), dtype=dtype), -1)
-            if self.pad:
-                if feature in ['coulomb','adjacency','distance']: 
-                    out = np.pad(flat, (0, self.pad**2-len(getattr(mol, feature))**2))
-                elif feature == 'mulliken':
-                    out = np.pad(getattr(mol, feature), (0, self.pad-len(getattr(mol, feature))))
-                elif feature in QM9.properties: 
-                    out = flat
-                else: 
-                    out = flat
+        for f in features:
+            out = getattr(mol, f)
+            if self.pad is not None:
+                if f in ['coulomb','adjacency','distance','mulliken']: 
+                    out = np.pad(out, (0, (self.pad - out.shape[0])))
+            if self.flatten:
+                out = np.reshape(out, -1)
             data.append(out)
         if len(data) == 0:
             return data
         else:
             return np.concatenate(data)
        
-    def __len__(self):
-        return len(self.ds_idx)
-    
     def open_file(self, in_file):
         with open(in_file) as f:
             data = []
@@ -252,7 +224,8 @@ class QM9(CDataset):
                 data.append(line)
             return data
         
-    def load_data(self, in_dir, n, filter_on, use_pickle): 
+    def load_data(self, in_dir='./data/qm9/qm9.xyz/', n=133885,  
+                 filter_on=None, use_pickle='qm9_datadic.p', dtype='float32'): 
         
         if use_pickle and os.path.exists('./data/qm9/'+use_pickle):
             print('loading QM9 datadic from a pickled copy...')
@@ -266,12 +239,13 @@ class QM9(CDataset):
                     i += 1
                     datadic[int(filename[-10:-4])] = QM9Mol(in_dir+filename)
                     
-                    if filter_on:
-                        val = self.get_features(datadic[int(filename[-10:-4])], 
+                    if filter_on is not None:
+                        val = self._get_features(datadic[int(filename[-10:-4])], 
                                                      [filter_on[0]], np.float32)
                         val = np.array2string(val, precision=4, floatmode='maxprec')[1:-1]
                      
                         if not eval(val+filter_on[1]+filter_on[2]):
+                            i -= 1
                             del datadic[int(filename[-10:-4])]
                         
                     if i % 10000 == 1: 
@@ -280,10 +254,10 @@ class QM9(CDataset):
                     if len(datadic) > n - 1:
                         break
                        
-            unchar = self.get_uncharacterized()
-            for mol in unchar: 
-                try: del datadic[mol]
-                except: continue
+            #unchar = self.get_uncharacterized()
+            #for mol in unchar: 
+            #    try: del datadic[mol]
+            #    except: continue
                     
             print('total QM9 molecules created:', len(datadic))
             
@@ -517,7 +491,7 @@ class ANI1x(CDataset):
                     continue
                 else:
                     datadic[mol] = features
-                if len(datadic) % 100 == 0:
+                if len(datadic) % 1000 == 0:
                     print('molecules loaded: ', len(datadic))
                                
         print('molecules loaded: ', len(datadic))
