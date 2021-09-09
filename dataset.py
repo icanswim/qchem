@@ -241,7 +241,7 @@ class QM9(CDataset):
                     
                     if filter_on is not None:
                         val = self._get_features(datadic[int(filename[-10:-4])], 
-                                                     [filter_on[0]], np.float32)
+                                                     [filter_on[0]])
                         val = np.array2string(val, precision=4, floatmode='maxprec')[1:-1]
                      
                         if not eval(val+filter_on[1]+filter_on[2]):
