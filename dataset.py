@@ -261,13 +261,16 @@ class QM9(CDataset):
                         print('QM9 molecules created: ', len(datadic))
                     if len(datadic) > n - 1:
                         break
-                       
-            #unchar = self.get_uncharacterized()
-            #for mol in unchar: 
-            #    try: del datadic[mol]
-            #    except: continue
-                    
-            print('total QM9 molecules created:', len(datadic))
+            
+            unchar = 0
+            uncharacterized = self.get_uncharacterized()
+            for mol in uncharacterized: 
+                try: 
+                    del datadic[mol]
+                    unchar += 1
+                except: continue
+            print('total uncharacterized molecules removed: ', unchar)       
+            print('total QM9 molecules created: ', len(datadic))
             
             if use_pickle:
                 print('pickling a copy of the QM9 datadic...')        
@@ -306,7 +309,7 @@ class ANI1x(CDataset):
     It is indexed by a molecular formula and conformation index
     
     This dataset is a pytorch and cosmosis dataset:
-    Returns [feature,feature,...,padding], [target,target,...]
+    Returns [feature1,feature2,...,padding], [target1,target2,...]
     
     Longest molecule is 63 atoms
     
