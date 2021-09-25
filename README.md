@@ -12,6 +12,9 @@ From Machine Learning for Molecular Simulation
 * see experiment.ipynb for examples
 
 ## References 
+Physics-based Deep Learning  
+https://arxiv.org/abs/2109.05237  
+
 AlphaFold  
 https://www.nature.com/articles/s41586-021-03819-2  
 https://github.com/deepmind/alphafold 
