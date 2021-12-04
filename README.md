@@ -15,6 +15,9 @@ From Machine Learning for Molecular Simulation
 Graph Neural Networks with Learnable Structural and Positional Representations  
 https://arxiv.org/abs/2110.07875  
 
+Physics-based Deep Learning  
+https://arxiv.org/abs/2109.05237  
+
 AlphaFold  
 https://www.nature.com/articles/s41586-021-03819-2  
 https://github.com/deepmind/alphafold 
