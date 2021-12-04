@@ -12,8 +12,13 @@ From Machine Learning for Molecular Simulation
 * see experiment.ipynb for examples
 
 ## References 
+<<<<<<< HEAD
 Physics-based Deep Learning  
 https://arxiv.org/abs/2109.05237  
+=======
+Graph Neural Networks with Learnable Structural and Positional Representations  
+https://arxiv.org/abs/2110.07875  
+>>>>>>> dev
 
 AlphaFold  
 https://www.nature.com/articles/s41586-021-03819-2  
