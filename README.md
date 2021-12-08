@@ -12,8 +12,22 @@ From Machine Learning for Molecular Simulation
 * see experiment.ipynb for examples
 
 ## References 
+GeoMol: Torsional Geometric Generation of Molecular 3D Conformer Ensembles  
+https://arxiv.org/abs/2106.07802  
+https://github.com/PattanaikL/GeoMol  
+
+Geometric Deep Learning: Grids, Groups, Graphs, Geodesics, and Gauges  
+https://arxiv.org/abs/2104.13478  
+
+Learning Neural Generative Dynamics for Molecular Conformation Generation  
+https://arxiv.org/abs/2102.10240  
+
+Equivariant message passing for the prediction of tensorial properties and molecular spectra  
+https://arxiv.org/abs/2102.03150  
+
 Graph Neural Networks with Learnable Structural and Positional Representations  
 https://arxiv.org/abs/2110.07875  
+https://github.com/vijaydwivedi75/gnn-lspe  
 
 Physics-based Deep Learning  
 https://arxiv.org/abs/2109.05237  
