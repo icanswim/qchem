@@ -52,7 +52,8 @@ Machine learning for protein folding and dynamics
 https://arxiv.org/abs/1911.09811 
 
 Graph Attention Networks  
-https://arxiv.org/abs/1710.10903 
+https://arxiv.org/abs/1710.10903  
+https://youtu.be/8owQBFAHw7E  
 
 Learning to Simulate Complex Physics with Graph Networks  
 https://arxiv.org/abs/2002.09405  
