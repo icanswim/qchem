@@ -5,11 +5,13 @@ From Machine Learning for Molecular Simulation
 >In 1929 Paul Dirac stated that: “The underlying physical laws necessary for the mathematical theory of a large part of physics and the whole of chemistry are thus completely known, and the difficulty is only that the exact application of these laws leads to equations much too complicated to be soluble.  It therefore becomes desirable that approximate practical methods of applying quantum mechanics should be developed, which can lead to an explanation of the main features of complex atomic systems without too much computation.”  Ninety years later,  this quote is still state of the art.  However, in the last decade, new tools from the rapidly developing field of machine learning (ML) have started to make significant impact on the development of approximate methods for complex atomic systems, bypassing the direct solution of “equations much too complicated to be soluble”.
 
 ## Datasets, models and learners implemented in pytorch 
-* uses the cosmosis datascience repo for rapid prototyping
 * light weight, modular, extentable
 * pytorch=1.6, cuda=10.1
+* optionally use the torch.utils.data.Dataset, torch_geometric.data.Dataset or cosmosis.dataset.CDataset base class
+* can be used with or without the icanswim/cosmosis datascience repo for rapid prototyping
 * see setup_notes.txt for implementation details
 * see experiment.ipynb for examples
+
 
 ## References 
 GeoMol: Torsional Geometric Generation of Molecular 3D Conformer Ensembles  
@@ -82,6 +84,9 @@ https://www.nature.com/articles/s41467-017-00839-3
 RDKit  
 https://www.rdkit.org/ 
 
+PyG  
+https://pytorch-geometric.readthedocs.io/en/latest/  
+
 SchNetPack: A Deep Learning Toolbox For Atomistic Systems  
 https://arxiv.org/abs/1809.01072 
 https://github.com/atomistic-machine-learning/schnetpack 
@@ -112,6 +117,10 @@ https://zenodo.org/record/3905361
 The ANI-1ccx and ANI-1x data sets, coupled-cluster and density functional theory properties for molecules  
 https://www.nature.com/articles/s41597-020-0473-z#Sec11 
 
+PyG Datasets  
+https://pytorch-geometric.readthedocs.io/en/latest/modules/datasets.html  
+
+Kaggle  
 https://www.kaggle.com/c/champs-scalar-coupling 
 
 
