@@ -21,11 +21,12 @@ class Molecule(ABC):
     Subclass and implement load_data()"""
     
     atomic_n = {'C': 6, 'H': 1, 'N': 7, 'O': 8, 'F': 9}
+    properties = ['rdmol','mol_block','adjacency','distance','coulomb']
     
     def __init__(self, in_dir):
         self.load_data(in_dir)
         self.rdmol_from_smile(self.smile)
-        self.create_adjacency(self.rdmol)
+        self.create_adjacency(self.mol_block)
         self.create_distance(self.xyz)
         self.create_coulomb(self.distance, self.xyz)
         
@@ -48,13 +49,13 @@ class Molecule(ABC):
         
     def rdmol_from_smile(self, smile):
         self.rdmol = Chem.AddHs(Chem.MolFromSmiles(smile))
+        self.mol_block = Chem.MolToMolBlock(self.rdmol)
     
-    def create_adjacency(self, rdmol):
+    def create_adjacency(self, mol_block):
         """use the rdmol mol block adjacency list to create a nxn symetric matrix with 0, 1, 2 or
         3 for bond type where n is the indexed atom list for the molecule"""
-        block = Chem.MolToMolBlock(rdmol)
         self.adjacency = np.zeros((self.n_atoms, self.n_atoms), dtype='int64')
-        block = block.split('\n')
+        block = mol_block.split('\n')
         for b in block[:-2]:
             line = ''.join(b.split())
             if len(line) == 4:
@@ -99,7 +100,8 @@ class Molecule(ABC):
 class QM9Mol(Molecule):
     
     properties = ['A','B','C','mu','alpha','homo','lumo', 
-                  'gap','r2','zpve','U0','U','H','G','Cv']
+                  'gap','r2','zpve','U0','U','H','G','Cv',
+                  'smile','n_atoms','xyz','mulliken']
     
     def __repr__(self):
         return self.in_file[:-4]
@@ -113,8 +115,8 @@ class QM9Mol(Molecule):
         self.smile = xyz[-2]
         self.n_atoms = int(xyz[0])
         
-        properties = xyz[1].strip().split('\t')[1:] #[float,...]
-        for i, p in enumerate(properties):
+        features = xyz[1].strip().split('\t')[1:] #[float,...]
+        for i, p in enumerate(features):
             setattr(self, QM9Mol.properties[i], np.reshape(np.asarray(p, 'float32'), -1))
             
         self.xyz = []
@@ -185,8 +187,8 @@ class QM9(CDataset):
     Physical machine learning outperforms "human learning" in Quantum Chemistry
     
     pad = length of longest molecule that all molecules will be padded to
-    features/target = QM9.properties,'coulomb','mulliken','adjacency',QM9Mol.attr
-    filter_on = ('attr', 'test', 'value')
+    features/target = QM9.properties
+    filter_on = ('property', 'test', 'value')
     n = non random subset selection (for testing)
     use_pickle = False/'qm9_datadic.p' (if file exists loads, if not creates and saves)
     """
@@ -194,7 +196,8 @@ class QM9(CDataset):
                        129158,130535,6620,59818]
     
     properties = ['A','B','C','mu','alpha','homo','lumo','gap','r2',
-                  'zpve','U0','U','H','G','Cv','n_atoms','smile']
+                  'zpve','U0','U','H','G','Cv','n_atoms','smile','coulomb',
+                  'adjacency','distance','mulliken']
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -316,19 +319,19 @@ class ANI1x(CDataset):
     select:
         molecular formula
         conformation
-        features
+        properties
         target
         padding
         data file location
         embedding options
     
-    criterion = the feature used to select the conformation
-    conformation = logic used on the criterion feature
+    criterion = the property used to select the conformation
+    conformation = logic used on the criterion property
         'min' - choose the index with the lowest value
         'max' - choose the index with the highest value
         'random' - choose the index randomly 
         int - choose the index int
-    features = ['feature','feature',...]
+    properties = ['feature','feature',...]
     targets = ['feature',...]
     pad = int/False
     embeds = [('feature',voc,vec,padding_idx,train)] 
@@ -363,14 +366,14 @@ class ANI1x(CDataset):
     
     distance = (Na, Na) distance matrix constructed from 'coordinates' feature
     """
-    features = ['atomic_numbers', 'ccsd(t)_cbs.energy', 'coordinates', 'hf_dz.energy',
-                'hf_qz.energy', 'hf_tz.energy', 'mp2_dz.corr_energy', 'mp2_qz.corr_energy',
-                'mp2_tz.corr_energy', 'npno_ccsd(t)_dz.corr_energy', 'npno_ccsd(t)_tz.corr_energy',
-                'tpno_ccsd(t)_dz.corr_energy', 'wb97x_dz.cm5_charges', 'wb97x_dz.dipole', 
-                'wb97x_dz.energy', 'wb97x_dz.forces', 'wb97x_dz.hirshfeld_charges', 
-                'wb97x_dz.quadrupole', 'wb97x_tz.dipole', 'wb97x_tz.energy', 'wb97x_tz.forces',
-                'wb97x_tz.mbis_charges', 'wb97x_tz.mbis_dipoles', 'wb97x_tz.mbis_octupoles',
-                'wb97x_tz.mbis_quadrupoles', 'wb97x_tz.mbis_volumes']
+    properties = ['atomic_numbers', 'ccsd(t)_cbs.energy', 'coordinates', 'hf_dz.energy',
+                  'hf_qz.energy', 'hf_tz.energy', 'mp2_dz.corr_energy', 'mp2_qz.corr_energy',
+                  'mp2_tz.corr_energy', 'npno_ccsd(t)_dz.corr_energy', 'npno_ccsd(t)_tz.corr_energy',
+                  'tpno_ccsd(t)_dz.corr_energy', 'wb97x_dz.cm5_charges', 'wb97x_dz.dipole', 
+                  'wb97x_dz.energy', 'wb97x_dz.forces', 'wb97x_dz.hirshfeld_charges', 
+                  'wb97x_dz.quadrupole', 'wb97x_tz.dipole', 'wb97x_tz.energy', 'wb97x_tz.forces',
+                  'wb97x_tz.mbis_charges', 'wb97x_tz.mbis_dipoles', 'wb97x_tz.mbis_octupoles',
+                  'wb97x_tz.mbis_quadrupoles', 'wb97x_tz.mbis_volumes','distance']
     
     
     def __init__(self, criterion=[], conformation='random', **kwargs):
@@ -596,11 +599,11 @@ class QM7X(CDataset):
     flatten = True/False 
     pad = None/int (pad length int in the Na (number of atoms) dimension)
     
-    returns datadic[idmol][idconf][features]
+    returns datadic[idmol][idconf][properties]
     """
     set_ids = ['1000','2000','3000','4000','5000','6000','7000','8000']
     
-    features = ['DIP','HLgap','KSE','atC6','atNUM','atPOL','atXYZ','eAT', 
+    properties = ['DIP','HLgap','KSE','atC6','atNUM','atPOL','atXYZ','eAT', 
                 'eC','eDFTB+MBD','eEE','eH','eKIN','eKSE','eL','eMBD','eNE', 
                 'eNN','ePBE0','ePBE0+MBD','eTS','eX','eXC','eXX','hCHG', 
                 'hDIP','hRAT','hVDIP','hVOL','mC6','mPOL','mTPOL','pbe0FOR', 
@@ -713,6 +716,8 @@ class QM7(CDataset):
     Composition in a Bayesian Regularized Neural Networks
     https://arxiv.org/abs/1904.10321
     """
+    properties = ['coulomb','xyz','atoms','ae']
+    
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         
@@ -753,8 +758,8 @@ class QM7b(CDataset):
     http://quantum-machine.org/data/qm7b.mat
     
     Place the downloaded file in the 'in_dir' folder (qchem/data/qm7b)
-    #coulomb = ds['X'] # (7211, 23, 23)
-    #properties = ds['T'] # (7211, 14)
+    coulomb = ds['X'] # (7211, 23, 23)
+    properties = ds['T'] # (7211, 14)
     
     This dataset is an extension of the QM7 dataset for multitask learning where 13 
     additional properties (e.g. polarizability, HOMO and LUMO eigenvalues, excitation 
@@ -770,7 +775,8 @@ class QM7b(CDataset):
     https://th.fhi-berlin.mpg.de/site/uploads/Publications/QM-NJP_20130315.pdf
     """
     properties = ['E','alpha_p','alpha_s','HOMO_g','HOMO_p','HOMO_z',
-                  'LUMO_g','LUMO_p','LUMO_z','IP','EA','E1','Emax','Imax']
+                  'LUMO_g','LUMO_p','LUMO_z','IP','EA','E1','Emax','Imax',
+                  'coulomb']
    
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -780,7 +786,7 @@ class QM7b(CDataset):
         datadic = {}
         for i in range(7211):
             datadic[i] = {}
-            for f in self.features+self.targets:
+            for f in self.features+self.embeds+self.targets:
                 if f in ['coulomb']:
                     datadic[i].update({f: ds['X'][i,:,:].astype('float32')})
                 elif f in ['E','alpha_p','alpha_s','HOMO_g','HOMO_p','HOMO_z',
