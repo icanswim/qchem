@@ -17,28 +17,32 @@ from torch import as_tensor, cat
 
 
 class Molecule(ABC):
-    """A class for creating a rdmol obj and coulomb matrix from a smile.  
-    Subclass and implement load_data()"""
-    
+    """"""
     atomic_n = {'C': 6, 'H': 1, 'N': 7, 'O': 8, 'F': 9}
     properties = ['rdmol','mol_block','adjacency','distance','coulomb']
     
-    def __init__(self, in_dir):
-        self.load_data(in_dir)
-        self.rdmol_from_smile(self.smile)
-        self.create_adjacency(self.mol_block)
-        self.create_distance(self.xyz)
-        self.create_coulomb(self.distance, self.xyz)
+    def __init__(self, *args):
+        self.load_data(*args)
+        if self.smile:
+            self.rdmol, self.mol_block = self.rdmol_from_smile(self.smile)
+        if self.mol_block:
+            self.adjacency = self.create_adjacency(self.mol_block)
+        if self.xyz:
+            self.distance = self.create_distance(self.xyz)
+        if self.distance and self.atom_type:
+            self.coulomb = self.create_coulomb(self.distance, self.atom_type) 
         
     @abstractmethod
     def __repr__(self):
         return self.mol_id
         
     @abstractmethod
-    def load_data(self):
-        self.smile = '' 
-        self.n_atoms = 0    
-        self.xyz = []  #[['atom_type',x,y,z],...]
+    def load_data(self, *args):
+        self.smile = None
+        self.mol_block = None
+        self.xyz = None
+        self.distance = None
+        self.atom_type = None
         
     def open_file(self, in_file):
         with open(in_file) as f:
@@ -48,47 +52,52 @@ class Molecule(ABC):
             return data
         
     def rdmol_from_smile(self, smile):
-        self.rdmol = Chem.AddHs(Chem.MolFromSmiles(smile))
-        self.mol_block = Chem.MolToMolBlock(self.rdmol)
+        rdmol = Chem.AddHs(Chem.MolFromSmiles(smile))
+        mol_block = Chem.MolToMolBlock(rdmol)
+        return rdmol, mol_block
     
     def create_adjacency(self, mol_block):
-        """use the rdmol mol block adjacency list to create a nxn symetric matrix with 0, 1, 2 or
-        3 for bond type where n is the indexed atom list for the molecule"""
-        self.adjacency = np.zeros((self.n_atoms, self.n_atoms), dtype='int64')
+        """use the V2000 chemical table's (rdmol MolBlock) adjacency list to create a 
+        nxn symetric matrix with 0, 1, 2 or 3 for bond type where n is the indexed 
+        atom"""
+        adjacency = np.zeros((self.n_atoms, self.n_atoms), dtype='int64')
         block = mol_block.split('\n')
         for b in block[:-2]:
             line = ''.join(b.split())
             if len(line) == 4:
                 # shift -1 to index from zero
-                self.adjacency[(int(line[0])-1),(int(line[1])-1)] = int(line[2]) 
+                adjacency[(int(line[0])-1),(int(line[1])-1)] = int(line[2]) 
                 # create bi-directional connection
-                self.adjacency[(int(line[1])-1),(int(line[0])-1)] = int(line[2]) 
+                adjacency[(int(line[1])-1),(int(line[0])-1)] = int(line[2]) 
+        return adjacency
              
     def create_distance(self, xyz):
         m = np.zeros((len(xyz), 3))
         # fix the scientific notation
         for i, atom in enumerate(xyz):
-            m[i,:] = [float(np.char.replace(x, '*^', 'e')) for x in atom[1:4]] 
-        self.distance = sp.distance.squareform(sp.distance.pdist(m)).astype('float32')
+            m[i,:] = [float(np.char.replace(a, '*^', 'e')) for a in atom] 
+        distance = sp.distance.squareform(sp.distance.pdist(m)).astype('float32')
+        return distance
       
-    def create_coulomb(self, distance, xyz, sigma=1):
+    def create_coulomb(self, distance, atom_type, sigma=1):
         """creates coulomb matrix obj attr.  set sigma to False to turn off random sorting.  
         sigma = stddev of gaussian noise.
         https://papers.nips.cc/paper/4830-learning-invariant-representations-of-\
         molecules-for-atomization-energy-prediction"""
         atoms = []
-        for atom in xyz:
-            atoms.append(Molecule.atomic_n[atom[0]]) 
+        for atom in atom_type:
+            atoms.append(Molecule.atomic_n[atom]) 
         atoms = np.asarray(atoms, dtype='float32')
         qmat = atoms[None, :]*atoms[:, None]
         idmat = np.linalg.inv(distance)
         np.fill_diagonal(idmat, 0)
-        coulomb = qmat@idmat
+        coul = qmat@idmat
         np.fill_diagonal(coulomb, 0.5 * atoms ** 2.4)
         if sigma:  
-            self.coulomb = self.sort_permute(coulomb, sigma)
+            coulomb = self.sort_permute(coul, sigma)
         else:  
-            self.coulomb = coulomb
+            coulomb = coul
+        return coulomb
     
     def sort_permute(self, matrix, sigma):
         norm = np.linalg.norm(matrix, axis=1)
@@ -111,24 +120,27 @@ class QM9Mol(Molecule):
         (http://quantum-machine.org/datasets/)
         """
         self.in_file = in_file
-        xyz = self.open_file(in_file)
-        self.smile = xyz[-2]
-        self.n_atoms = int(xyz[0])
+        self.qm9_block = self.open_file(in_file)
+    
+        self.smile = self.mol_block[-2]
+        self.n_atoms = int(self.mol_block[0])
         
-        features = xyz[1].strip().split('\t')[1:] #[float,...]
-        for i, p in enumerate(features):
+        properties = self.mol_block[1].strip().split('\t')[1:] #[float,...]
+        for i, p in enumerate(properties):
             setattr(self, QM9Mol.properties[i], np.reshape(np.asarray(p, 'float32'), -1))
             
-        self.xyz = []
-        for atom in xyz[2:self.n_atoms+2]:
-            self.xyz.append(atom.strip().split('\t')) #[['atom_type',x,y,z,mulliken],...]
+        xyz = []
+        for atom in self.mol_block[2:self.n_atoms+2]:
+            xyz.append(atom.strip().split('\t')) #[['atom_type',x,y,z,mulliken],...]
             
-        self.mulliken = []
-        for atom in self.xyz:
+        self.atom_type = [atom[0] for atom in xyz]
+
+        mulliken = []
+        for atom in xyz:
             m = np.reshape(np.asarray(np.char.replace(atom[4], '*^', 'e'), 
                                                           dtype=np.float32), -1)
-            self.mulliken.append(m)
-        self.mulliken = np.concatenate(self.mulliken, axis=0)
+            mulliken.append(m)
+        self.mulliken = np.concatenate(mulliken, axis=0)
        
     
 class QM9(CDataset):
