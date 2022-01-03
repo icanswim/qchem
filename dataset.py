@@ -17,19 +17,20 @@ from torch import as_tensor, cat
 
 
 class Molecule(ABC):
-    """"""
+    """a class for creating rdmol, mol_block, adjacency, distance and coulomb.  
+    subclass and impliment load_data() and __repr__()."""
     atomic_n = {'C': 6, 'H': 1, 'N': 7, 'O': 8, 'F': 9}
     properties = ['rdmol','mol_block','adjacency','distance','coulomb']
     
     def __init__(self, *args):
         self.load_data(*args)
-        if self.smile:
+        if hasattr(self, 'smile'):
             self.rdmol, self.mol_block = self.rdmol_from_smile(self.smile)
-        if self.mol_block:
+        if hasattr(self, 'mol_block'):
             self.adjacency = self.create_adjacency(self.mol_block)
-        if self.xyz:
+        if hasattr(self, 'xyz'):
             self.distance = self.create_distance(self.xyz)
-        if self.distance and self.atom_type:
+        if hasattr(self, 'distance') and hasattr(self, 'atom_type'):
             self.coulomb = self.create_coulomb(self.distance, self.atom_type) 
         
     @abstractmethod
@@ -43,6 +44,7 @@ class Molecule(ABC):
         self.xyz = None
         self.distance = None
         self.atom_type = None
+        self.n_atoms = None
         
     def open_file(self, in_file):
         with open(in_file) as f:
@@ -73,9 +75,8 @@ class Molecule(ABC):
              
     def create_distance(self, xyz):
         m = np.zeros((len(xyz), 3))
-        # fix the scientific notation
         for i, atom in enumerate(xyz):
-            m[i,:] = [float(np.char.replace(a, '*^', 'e')) for a in atom] 
+            m[i,:] = atom 
         distance = sp.distance.squareform(sp.distance.pdist(m)).astype('float32')
         return distance
       
@@ -92,7 +93,7 @@ class Molecule(ABC):
         idmat = np.linalg.inv(distance)
         np.fill_diagonal(idmat, 0)
         coul = qmat@idmat
-        np.fill_diagonal(coulomb, 0.5 * atoms ** 2.4)
+        np.fill_diagonal(coul, 0.5 * atoms ** 2.4)
         if sigma:  
             coulomb = self.sort_permute(coul, sigma)
         else:  
@@ -119,27 +120,30 @@ class QM9Mol(Molecule):
         """load from the .xyz files of the qm9 dataset
         (http://quantum-machine.org/datasets/)
         """
+        self.testtesttest = 'test'
         self.in_file = in_file
         self.qm9_block = self.open_file(in_file)
     
-        self.smile = self.mol_block[-2]
-        self.n_atoms = int(self.mol_block[0])
+        self.smile = self.qm9_block[-2]
+        self.n_atoms = int(self.qm9_block[0])
         
-        properties = self.mol_block[1].strip().split('\t')[1:] #[float,...]
+        properties = self.qm9_block[1].strip().split('\t')[1:] #[float,...]
         for i, p in enumerate(properties):
             setattr(self, QM9Mol.properties[i], np.reshape(np.asarray(p, 'float32'), -1))
             
+        atom_type = []
         xyz = []
-        for atom in self.mol_block[2:self.n_atoms+2]:
-            xyz.append(atom.strip().split('\t')) #[['atom_type',x,y,z,mulliken],...]
-            
-        self.atom_type = [atom[0] for atom in xyz]
-
         mulliken = []
-        for atom in xyz:
-            m = np.reshape(np.asarray(np.char.replace(atom[4], '*^', 'e'), 
-                                                          dtype=np.float32), -1)
-            mulliken.append(m)
+        for atom in self.qm9_block[2:self.n_atoms+2]:
+            stripped = atom.strip().split('\t') #[['atom_type',x,y,z,mulliken],...] 
+            atom_type.append(stripped[0])
+            xyz.append(np.reshape(np.asarray( #fix scientific notation
+                np.char.replace(stripped[1:4], '*^', 'e'), dtype=np.float32), -1))
+            mulliken.append(np.reshape(np.asarray( #fix scientific notation
+                np.char.replace(stripped[4], '*^', 'e'), dtype=np.float32), -1))
+
+        self.atom_type = atom_type
+        self.xyz = xyz
         self.mulliken = np.concatenate(mulliken, axis=0)
        
     
