@@ -143,8 +143,7 @@ class QM9Mol(Molecule):
                 np.char.replace(stripped[4], '*^', 'e'), dtype=np.float32), -1))
 
         self.atom_type = atom_type
-        #self.xyz = np.concatenate(xyz, axis=0)
-        self.xyz = xyz
+        self.xyz = np.reshape(np.concatenate(xyz), (-1, 3))
         self.mulliken = np.concatenate(mulliken, axis=0)
        
     
