@@ -25,13 +25,14 @@ class Molecule(ABC):
     def __init__(self, *args):
         self.load_data(*args)
         if hasattr(self, 'smile'):
-            self.rdmol, self.mol_block = self.rdmol_from_smile(self.smile)
+            self.rdmol, self.mol_block, self.n_atoms, \
+            self.atom_types, self.atomic_numbers = self.rdmol_from_smile(self.smile)
         if hasattr(self, 'mol_block'):
             self.adjacency = self.create_adjacency(self.mol_block)
         if hasattr(self, 'xyz'):
             self.distance = self.create_distance(self.xyz)
-        if hasattr(self, 'distance') and hasattr(self, 'atom_type'):
-            self.coulomb = self.create_coulomb(self.distance, self.atom_type) 
+        if hasattr(self, 'distance') and hasattr(self, 'atom_types'):
+            self.coulomb = self.create_coulomb(self.distance, self.atom_types) 
         
     @abstractmethod
     def __repr__(self):
@@ -43,8 +44,9 @@ class Molecule(ABC):
         self.mol_block = None
         self.xyz = None
         self.distance = None
-        self.atom_type = None
+        self.atom_types = None
         self.n_atoms = None
+        self.atomic_numbers = None
         
     def open_file(self, in_file):
         with open(in_file) as f:
@@ -55,8 +57,16 @@ class Molecule(ABC):
         
     def rdmol_from_smile(self, smile):
         rdmol = Chem.AddHs(Chem.MolFromSmiles(smile))
+
+        atom_types = []
+        atomic_numbers = []
+        for atom in rdmol.GetAtoms():
+            atom_types.append(atom.GetSymbol())
+            atomic_numbers.append(atom.GetAtomicNum())   
         mol_block = Chem.MolToMolBlock(rdmol)
-        return rdmol, mol_block
+        n_atoms = rdmol.GetNumAtoms()
+        
+        return rdmol, mol_block, n_atoms, atom_types, atomic_numbers
     
     def create_adjacency(self, mol_block):
         """use the V2000 chemical table's (rdmol MolBlock) adjacency list to create a 
@@ -72,7 +82,7 @@ class Molecule(ABC):
                 # create bi-directional connection
                 adjacency[(int(line[1])-1),(int(line[0])-1)] = int(line[2]) 
         return adjacency
-             
+            
     def create_distance(self, xyz):
         m = np.zeros((len(xyz), 3))
         for i, atom in enumerate(xyz):
@@ -80,13 +90,13 @@ class Molecule(ABC):
         distance = sp.distance.squareform(sp.distance.pdist(m)).astype('float32')
         return distance
       
-    def create_coulomb(self, distance, atom_type, sigma=1):
+    def create_coulomb(self, distance, atom_types, sigma=1):
         """creates coulomb matrix obj attr.  set sigma to False to turn off random sorting.  
         sigma = stddev of gaussian noise.
         https://papers.nips.cc/paper/4830-learning-invariant-representations-of-\
         molecules-for-atomization-energy-prediction"""
         atoms = []
-        for atom in atom_type:
+        for atom in atom_types:
             atoms.append(Molecule.atomic_n[atom]) 
         atoms = np.asarray(atoms, dtype='float32')
         qmat = atoms[None, :]*atoms[:, None]
@@ -112,37 +122,35 @@ class QM9Mol(Molecule):
     properties = ['A','B','C','mu','alpha','homo','lumo', 
                   'gap','r2','zpve','U0','U','H','G','Cv',
                   'smile','n_atoms','xyz','mulliken']
-    
+       
     def __repr__(self):
-        return self.in_file[:-4]
+        return self.in_file[-20:-4]
     
     def load_data(self, in_file):
         """load from the .xyz files of the qm9 dataset
         (http://quantum-machine.org/datasets/)
         """
-        self.testtesttest = 'test'
         self.in_file = in_file
         self.qm9_block = self.open_file(in_file)
-    
-        self.smile = self.qm9_block[-2]
+        self.smile = self.qm9_block[-2]    
         self.n_atoms = int(self.qm9_block[0])
         
         properties = self.qm9_block[1].strip().split('\t')[1:] #[float,...]
         for i, p in enumerate(properties):
             setattr(self, QM9Mol.properties[i], np.reshape(np.asarray(p, 'float32'), -1))
             
-        atom_type = []
+        atom_types = []
         xyz = []
         mulliken = []
         for atom in self.qm9_block[2:self.n_atoms+2]:
             stripped = atom.strip().split('\t') #[['atom_type',x,y,z,mulliken],...] 
-            atom_type.append(stripped[0])
+            atom_types.append(stripped[0])
             xyz.append(np.reshape(np.asarray( #fix scientific notation
                 np.char.replace(stripped[1:4], '*^', 'e'), dtype=np.float32), -1))
             mulliken.append(np.reshape(np.asarray( #fix scientific notation
                 np.char.replace(stripped[4], '*^', 'e'), dtype=np.float32), -1))
 
-        self.atom_type = atom_type
+        self.atom_types = atom_types
         self.xyz = np.reshape(np.concatenate(xyz), (-1, 3))
         self.mulliken = np.concatenate(mulliken, axis=0)
        
