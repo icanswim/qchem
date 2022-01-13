@@ -25,8 +25,7 @@ class Molecule(ABC):
     def __init__(self, *args):
         self.load_data(*args)
         if hasattr(self, 'smile'):
-            self.rdmol, self.mol_block, self.n_atoms, \
-            self.atom_types, self.atomic_numbers = self.rdmol_from_smile(self.smile)
+            self.rdmol_from_smile(self.smile)
         if hasattr(self, 'mol_block'):
             self.adjacency = self.create_adjacency(self.mol_block)
         if hasattr(self, 'xyz'):
@@ -56,18 +55,26 @@ class Molecule(ABC):
             return data
         
     def rdmol_from_smile(self, smile):
-        rdmol = Chem.AddHs(Chem.MolFromSmiles(smile))
+        self.rdmol = Chem.AddHs(Chem.MolFromSmiles(smile))
 
-        atom_types = []
-        atomic_numbers = []
-        for atom in rdmol.GetAtoms():
-            atom_types.append(atom.GetSymbol())
-            atomic_numbers.append(atom.GetAtomicNum())   
-        mol_block = Chem.MolToMolBlock(rdmol)
-        n_atoms = rdmol.GetNumAtoms()
+        self.atom_types = []
+        self.atomic_numbers = []
+        self.aromatic = []
+        self.hybrid_types = []
         
-        return rdmol, mol_block, n_atoms, atom_types, atomic_numbers
-    
+        for atom in self.rdmol.GetAtoms():
+            self.atom_types.append(atom.GetSymbol())
+            self.atomic_numbers.append(atom.GetAtomicNum()) 
+            self.aromatic.append(1 if atom.GetIsAromatic() else 0)
+            hybrid = atom.GetHybridization()
+            if hybrid == Chem.HybridizationType.SP: self.hybrid_types.append('sp')
+            elif hybrid == Chem.HybridizationType.SP2: self.hybrid_types.append('sp2')
+            elif hybrid == Chem.HybridizationType.SP3: self.hybrid_types.append('sp3')
+            else: self.hybrid_types.append('na')
+            
+        self.mol_block = Chem.MolToMolBlock(self.rdmol)
+        self.n_atoms = self.rdmol.GetNumAtoms()
+
     def create_adjacency(self, mol_block):
         """use the V2000 chemical table's (rdmol MolBlock) adjacency list to create a 
         nxn symetric matrix with 0, 1, 2 or 3 for bond type where n is the indexed 
