@@ -25,13 +25,13 @@ class Molecule(ABC):
     def __init__(self, *args):
         self.load_data(*args)
         if hasattr(self, 'smile'):
-            self.rdmol, self.mol_block = self.rdmol_from_smile(self.smile)
+            self.rdmol_from_smile(self.smile)
         if hasattr(self, 'mol_block'):
             self.adjacency = self.create_adjacency(self.mol_block)
         if hasattr(self, 'xyz'):
             self.distance = self.create_distance(self.xyz)
-        if hasattr(self, 'distance') and hasattr(self, 'atom_type'):
-            self.coulomb = self.create_coulomb(self.distance, self.atom_type) 
+        if hasattr(self, 'distance') and hasattr(self, 'atom_types'):
+            self.coulomb = self.create_coulomb(self.distance, self.atom_types) 
         
     @abstractmethod
     def __repr__(self):
@@ -43,8 +43,9 @@ class Molecule(ABC):
         self.mol_block = None
         self.xyz = None
         self.distance = None
-        self.atom_type = None
+        self.atom_types = None
         self.n_atoms = None
+        self.atomic_numbers = None
         
     def open_file(self, in_file):
         with open(in_file) as f:
@@ -54,15 +55,36 @@ class Molecule(ABC):
             return data
         
     def rdmol_from_smile(self, smile):
-        rdmol = Chem.AddHs(Chem.MolFromSmiles(smile))
-        mol_block = Chem.MolToMolBlock(rdmol)
-        return rdmol, mol_block
-    
+        self.rdmol = Chem.AddHs(Chem.MolFromSmiles(smile))
+
+        self.atom_types = []
+        self.atomic_numbers = []
+        self.aromatic = []
+        self.hybrid_types = []
+        
+        for atom in self.rdmol.GetAtoms():
+            self.atom_types.append(atom.GetSymbol())
+            self.atomic_numbers.append(atom.GetAtomicNum()) 
+            self.aromatic.append(1 if atom.GetIsAromatic() else 0)
+            hybrid = atom.GetHybridization()
+            if hybrid == Chem.HybridizationType.SP: self.hybrid_types.append('sp')
+            elif hybrid == Chem.HybridizationType.SP2: self.hybrid_types.append('sp2')
+            elif hybrid == Chem.HybridizationType.SP3: self.hybrid_types.append('sp3')
+            else: self.hybrid_types.append('na')
+        
+        self.atom_types = np.asarray(self.atom_types)
+        self.atomic_numbers = np.asarray(self.atomic_numbers, dtype=np.float32)
+        self.aromatic = np.asarray(self.aromatic)
+        self.hybrid_types = np.asarray(self.hybrid_types)
+        self.mol_block = Chem.MolToMolBlock(self.rdmol)
+        self.n_atoms = np.asarray(self.rdmol.GetNumAtoms(), dtype=np.float32)
+
     def create_adjacency(self, mol_block):
         """use the V2000 chemical table's (rdmol MolBlock) adjacency list to create a 
         nxn symetric matrix with 0, 1, 2 or 3 for bond type where n is the indexed 
         atom"""
-        adjacency = np.zeros((self.n_atoms, self.n_atoms), dtype='int64')
+        adjacency = np.zeros((self.n_atoms.astype(int), self.n_atoms.astype(int)), 
+                                                                     dtype='int64')
         block = mol_block.split('\n')
         for b in block[:-2]:
             line = ''.join(b.split())
@@ -72,7 +94,7 @@ class Molecule(ABC):
                 # create bi-directional connection
                 adjacency[(int(line[1])-1),(int(line[0])-1)] = int(line[2]) 
         return adjacency
-             
+            
     def create_distance(self, xyz):
         m = np.zeros((len(xyz), 3))
         for i, atom in enumerate(xyz):
@@ -80,13 +102,13 @@ class Molecule(ABC):
         distance = sp.distance.squareform(sp.distance.pdist(m)).astype('float32')
         return distance
       
-    def create_coulomb(self, distance, atom_type, sigma=1):
+    def create_coulomb(self, distance, atom_types, sigma=1):
         """creates coulomb matrix obj attr.  set sigma to False to turn off random sorting.  
         sigma = stddev of gaussian noise.
         https://papers.nips.cc/paper/4830-learning-invariant-representations-of-\
         molecules-for-atomization-energy-prediction"""
         atoms = []
-        for atom in atom_type:
+        for atom in atom_types:
             atoms.append(Molecule.atomic_n[atom]) 
         atoms = np.asarray(atoms, dtype='float32')
         qmat = atoms[None, :]*atoms[:, None]
@@ -112,39 +134,36 @@ class QM9Mol(Molecule):
     properties = ['A','B','C','mu','alpha','homo','lumo', 
                   'gap','r2','zpve','U0','U','H','G','Cv',
                   'smile','n_atoms','xyz','mulliken']
-    
+       
     def __repr__(self):
-        return self.in_file[:-4]
+        return self.in_file[-20:-4]
     
     def load_data(self, in_file):
         """load from the .xyz files of the qm9 dataset
         (http://quantum-machine.org/datasets/)
         """
-        self.testtesttest = 'test'
         self.in_file = in_file
         self.qm9_block = self.open_file(in_file)
-    
-        self.smile = self.qm9_block[-2]
+        self.smile = self.qm9_block[-2]    
         self.n_atoms = int(self.qm9_block[0])
         
         properties = self.qm9_block[1].strip().split('\t')[1:] #[float,...]
         for i, p in enumerate(properties):
             setattr(self, QM9Mol.properties[i], np.reshape(np.asarray(p, 'float32'), -1))
             
-        atom_type = []
+        atom_types = []
         xyz = []
         mulliken = []
         for atom in self.qm9_block[2:self.n_atoms+2]:
             stripped = atom.strip().split('\t') #[['atom_type',x,y,z,mulliken],...] 
-            atom_type.append(stripped[0])
+            atom_types.append(stripped[0])
             xyz.append(np.reshape(np.asarray( #fix scientific notation
                 np.char.replace(stripped[1:4], '*^', 'e'), dtype=np.float32), -1))
             mulliken.append(np.reshape(np.asarray( #fix scientific notation
                 np.char.replace(stripped[4], '*^', 'e'), dtype=np.float32), -1))
 
-        self.atom_type = atom_type
-        #self.xyz = np.concatenate(xyz, axis=0)
-        self.xyz = xyz
+        self.atom_types = np.asarray(atom_types)
+        self.xyz = np.reshape(np.concatenate(xyz), (-1, 3))
         self.mulliken = np.concatenate(mulliken, axis=0)
        
     
@@ -224,26 +243,36 @@ class QM9(CDataset):
         for f in features:
             out = getattr(mol, f)
             if self.pad is not None:
-                if f in ['coulomb','adjacency','distance','mulliken']: 
+                if f not in self.do_not_pad:
                     out = np.pad(out, (0, (self.pad - out.shape[0])))
             if self.flatten:
-                out = np.reshape(out, -1)
+                out = np.reshape(out, -1)  
             data.append(out)
-        if len(data) == 0:
-            return data
-        else:
-            return np.concatenate(data)
+        return np.concatenate(data)
         
+    
     def _get_embed_idx(self, mol, embeds, embed_lookup):
+        """convert a list of 1 or more categorical features to an array of ints which can then
+        be fed to an embedding layer
+        datadic = {'feature_name': 'feature'}
+        embeds = ['feature_name','feature_name']
+        embed_lookup = {'feature_name': int, '0': 0} 
+            dont forget an embedding for the padding (padding_idx)
+        do_not_pad = ['feature_name']
+        """
         embed_idx = []
         for e in embeds:
             out = getattr(mol, e)
-            idx = []
+            
             if self.pad is not None:
-                out = np.pad(out, (0, (self.pad - out.shape[0])))
+                if e not in self.do_not_pad:
+                    out = np.pad(out, (0, (self.pad - out.shape[0])))
+                    
+            idx = []        
             for i in np.reshape(out, -1).tolist():
                 idx.append(np.reshape(np.asarray(embed_lookup[i]), -1).astype('int64'))
             embed_idx.append(np.concatenate(idx))
+            
         return embed_idx
        
     def open_file(self, in_file):

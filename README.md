@@ -13,25 +13,28 @@ From Machine Learning for Molecular Simulation
 
 
 ## References 
+Valence Discovery  
+https://www.youtube.com/channel/UC3ew3t5al4sN-Zk01DGVKlg 
+
 GeoMol: Torsional Geometric Generation of Molecular 3D Conformer Ensembles  
 https://arxiv.org/abs/2106.07802  
-https://github.com/PattanaikL/GeoMol  
+https://github.com/PattanaikL/GeoMol 
 
 Geometric Deep Learning: Grids, Groups, Graphs, Geodesics, and Gauges  
-https://arxiv.org/abs/2104.13478  
+https://arxiv.org/abs/2104.13478 
 
 Learning Neural Generative Dynamics for Molecular Conformation Generation  
-https://arxiv.org/abs/2102.10240  
+https://arxiv.org/abs/2102.10240 
 
 Equivariant message passing for the prediction of tensorial properties and molecular spectra  
-https://arxiv.org/abs/2102.03150  
+https://arxiv.org/abs/2102.03150 
 
 Graph Neural Networks with Learnable Structural and Positional Representations  
 https://arxiv.org/abs/2110.07875  
-https://github.com/vijaydwivedi75/gnn-lspe  
+https://github.com/vijaydwivedi75/gnn-lspe 
 
 Physics-based Deep Learning  
-https://arxiv.org/abs/2109.05237  
+https://arxiv.org/abs/2109.05237 
 
 AlphaFold  
 https://www.nature.com/articles/s41586-021-03819-2  
@@ -117,10 +120,15 @@ The ANI-1ccx and ANI-1x data sets, coupled-cluster and density functional theory
 https://www.nature.com/articles/s41597-020-0473-z#Sec11 
 
 PyG Datasets  
-https://pytorch-geometric.readthedocs.io/en/latest/modules/datasets.html  
+https://pytorch-geometric.readthedocs.io/en/latest/modules/datasets.html 
 
 Kaggle  
 https://www.kaggle.com/c/champs-scalar-coupling 
+
+QMugs: Quantum Mechanical Properties of Drug-like Molecules  
+https://arxiv.org/abs/2107.00367  
+https://doi.org/10.3929/ethz-b-000482129 
+
 
 
 
