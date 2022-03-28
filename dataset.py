@@ -71,15 +71,20 @@ class Molecule(ABC):
             elif hybrid == Chem.HybridizationType.SP2: self.hybrid_types.append('sp2')
             elif hybrid == Chem.HybridizationType.SP3: self.hybrid_types.append('sp3')
             else: self.hybrid_types.append('na')
-            
+        
+        self.atom_types = np.asarray(self.atom_types)
+        self.atomic_numbers = np.asarray(self.atomic_numbers, dtype=np.float32)
+        self.aromatic = np.asarray(self.aromatic)
+        self.hybrid_types = np.asarray(self.hybrid_types)
         self.mol_block = Chem.MolToMolBlock(self.rdmol)
-        self.n_atoms = self.rdmol.GetNumAtoms()
+        self.n_atoms = np.asarray(self.rdmol.GetNumAtoms(), dtype=np.float32)
 
     def create_adjacency(self, mol_block):
         """use the V2000 chemical table's (rdmol MolBlock) adjacency list to create a 
         nxn symetric matrix with 0, 1, 2 or 3 for bond type where n is the indexed 
         atom"""
-        adjacency = np.zeros((self.n_atoms, self.n_atoms), dtype='int64')
+        adjacency = np.zeros((self.n_atoms.astype(int), self.n_atoms.astype(int)), 
+                                                                     dtype='int64')
         block = mol_block.split('\n')
         for b in block[:-2]:
             line = ''.join(b.split())
@@ -157,7 +162,7 @@ class QM9Mol(Molecule):
             mulliken.append(np.reshape(np.asarray( #fix scientific notation
                 np.char.replace(stripped[4], '*^', 'e'), dtype=np.float32), -1))
 
-        self.atom_types = atom_types
+        self.atom_types = np.asarray(atom_types)
         self.xyz = np.reshape(np.concatenate(xyz), (-1, 3))
         self.mulliken = np.concatenate(mulliken, axis=0)
        
@@ -238,26 +243,36 @@ class QM9(CDataset):
         for f in features:
             out = getattr(mol, f)
             if self.pad is not None:
-                if f in ['coulomb','adjacency','distance','mulliken']: 
+                if f not in self.do_not_pad:
                     out = np.pad(out, (0, (self.pad - out.shape[0])))
             if self.flatten:
-                out = np.reshape(out, -1)
+                out = np.reshape(out, -1)  
             data.append(out)
-        if len(data) == 0:
-            return data
-        else:
-            return np.concatenate(data)
+        return np.concatenate(data)
         
+    
     def _get_embed_idx(self, mol, embeds, embed_lookup):
+        """convert a list of 1 or more categorical features to an array of ints which can then
+        be fed to an embedding layer
+        datadic = {'feature_name': 'feature'}
+        embeds = ['feature_name','feature_name']
+        embed_lookup = {'feature_name': int, '0': 0} 
+            dont forget an embedding for the padding (padding_idx)
+        do_not_pad = ['feature_name']
+        """
         embed_idx = []
         for e in embeds:
             out = getattr(mol, e)
-            idx = []
+            
             if self.pad is not None:
-                out = np.pad(out, (0, (self.pad - out.shape[0])))
+                if e not in self.do_not_pad:
+                    out = np.pad(out, (0, (self.pad - out.shape[0])))
+                    
+            idx = []        
             for i in np.reshape(out, -1).tolist():
                 idx.append(np.reshape(np.asarray(embed_lookup[i]), -1).astype('int64'))
             embed_idx.append(np.concatenate(idx))
+            
         return embed_idx
        
     def open_file(self, in_file):
