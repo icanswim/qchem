@@ -13,6 +13,9 @@ From Machine Learning for Molecular Simulation
 
 
 ## References 
+Geometric Deep Learning: Grids, Groups, Graphs, Geodesics, and Gauges  
+https://arxiv.org/abs/2104.13478 
+
 Valence Discovery  
 https://www.youtube.com/channel/UC3ew3t5al4sN-Zk01DGVKlg 
 
