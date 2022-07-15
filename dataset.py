@@ -16,8 +16,12 @@ from rdkit import Chem
 from torch import as_tensor, cat
 
 
+from torch_geometric.data.data import Data
+
+
 class Molecule(ABC):
-    """a class for creating rdmol, mol_block, adjacency, distance and coulomb.  
+    """a class for creating molecule instance with rdmol, mol_block, 
+    adjacency, distance and coulomb properties.  
     subclass and impliment load_data() and __repr__()."""
     atomic_n = {'C': 6, 'H': 1, 'N': 7, 'O': 8, 'F': 9}
     properties = ['rdmol','mol_block','adjacency','distance','coulomb']
@@ -283,7 +287,7 @@ class QM9(CDataset):
             return data
         
     def load_data(self, in_dir='./data/qm9/qm9.xyz/', n=133885,  
-                 filter_on=None, use_pickle='qm9_datadic.p', dtype='float32'): 
+                 filter_on=None, use_pickle='qm9_datadic.p', dtype='float32'):
         
         if use_pickle and os.path.exists('./data/qm9/'+use_pickle):
             print('loading QM9 datadic from a pickled copy...')

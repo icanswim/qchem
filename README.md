@@ -23,9 +23,6 @@ GeoMol: Torsional Geometric Generation of Molecular 3D Conformer Ensembles
 https://arxiv.org/abs/2106.07802  
 https://github.com/PattanaikL/GeoMol 
 
-Geometric Deep Learning: Grids, Groups, Graphs, Geodesics, and Gauges  
-https://arxiv.org/abs/2104.13478 
-
 Learning Neural Generative Dynamics for Molecular Conformation Generation  
 https://arxiv.org/abs/2102.10240 
 
