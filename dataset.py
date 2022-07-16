@@ -12,16 +12,16 @@ from scipy import spatial as sp
 from scipy.io import loadmat
 
 from rdkit import Chem
+from rdkit.Chem import AllChem
 
 from torch import as_tensor, cat
 
-
-from torch_geometric.data.data import Data
+from torch_geometric.data import Data
 
 
 class Molecule(ABC):
-    """a class for creating molecule instance with rdmol, mol_block, 
-    adjacency, distance and coulomb properties.  
+    """a class for creating molecule instance from a smile.
+    creates mol_block, adjacency, distance and coulomb properties.  
     subclass and impliment load_data() and __repr__()."""
     atomic_n = {'C': 6, 'H': 1, 'N': 7, 'O': 8, 'F': 9}
     properties = ['rdmol','mol_block','adjacency','distance','coulomb']
@@ -32,10 +32,12 @@ class Molecule(ABC):
             self.rdmol_from_smile(self.smile)
         if hasattr(self, 'mol_block'):
             self.adjacency = self.create_adjacency(self.mol_block)
+        if not hasattr(self, 'xyz'):
+            self.create_xyz()
         if hasattr(self, 'xyz'):
             self.distance = self.create_distance(self.xyz)
         if hasattr(self, 'distance') and hasattr(self, 'atom_types'):
-            self.coulomb = self.create_coulomb(self.distance, self.atom_types) 
+            self.coulomb = self.create_coulomb(self.distance, self.atom_types)
         
     @abstractmethod
     def __repr__(self):
@@ -59,29 +61,30 @@ class Molecule(ABC):
             return data
         
     def rdmol_from_smile(self, smile):
-        self.rdmol = Chem.AddHs(Chem.MolFromSmiles(smile))
-
-        self.atom_types = []
-        self.atomic_numbers = []
-        self.aromatic = []
-        self.hybrid_types = []
+        mol = Chem.AddHs(Chem.MolFromSmiles(smile))
         
-        for atom in self.rdmol.GetAtoms():
-            self.atom_types.append(atom.GetSymbol())
-            self.atomic_numbers.append(atom.GetAtomicNum()) 
-            self.aromatic.append(1 if atom.GetIsAromatic() else 0)
+        atom_types = []
+        atomic_numbers = []
+        aromatic = []
+        hybrid_types = []
+        
+        for atom in mol.GetAtoms():
+            atom_types.append(atom.GetSymbol())
+            atomic_numbers.append(atom.GetAtomicNum()) 
+            aromatic.append(1 if atom.GetIsAromatic() else 0)
             hybrid = atom.GetHybridization()
-            if hybrid == Chem.HybridizationType.SP: self.hybrid_types.append('sp')
-            elif hybrid == Chem.HybridizationType.SP2: self.hybrid_types.append('sp2')
-            elif hybrid == Chem.HybridizationType.SP3: self.hybrid_types.append('sp3')
-            else: self.hybrid_types.append('na')
+            if hybrid == Chem.HybridizationType.SP: hybrid_types.append('sp')
+            elif hybrid == Chem.HybridizationType.SP2: hybrid_types.append('sp2')
+            elif hybrid == Chem.HybridizationType.SP3: hybrid_types.append('sp3')
+            else: hybrid_types.append('na')
         
-        self.atom_types = np.asarray(self.atom_types)
-        self.atomic_numbers = np.asarray(self.atomic_numbers, dtype=np.float32)
-        self.aromatic = np.asarray(self.aromatic)
-        self.hybrid_types = np.asarray(self.hybrid_types)
-        self.mol_block = Chem.MolToMolBlock(self.rdmol)
-        self.n_atoms = np.asarray(self.rdmol.GetNumAtoms(), dtype=np.float32)
+        self.atom_types = np.asarray(atom_types)
+        self.atomic_numbers = np.asarray(atomic_numbers, dtype=np.float32)
+        self.aromatic = np.asarray(aromatic)
+        self.hybrid_types = np.asarray(hybrid_types)
+        self.mol_block = Chem.MolToMolBlock(mol)
+        self.n_atoms = np.asarray(mol.GetNumAtoms(), dtype=np.float32)
+        self.rdmol = mol
 
     def create_adjacency(self, mol_block):
         """use the V2000 chemical table's (rdmol MolBlock) adjacency list to create a 
@@ -98,7 +101,19 @@ class Molecule(ABC):
                 # create bi-directional connection
                 adjacency[(int(line[1])-1),(int(line[0])-1)] = int(line[2]) 
         return adjacency
-            
+    
+    def create_xyz(self):
+        if hasattr(self, 'rdmol'):
+            if AllChem.EmbedMolecule(self.rdmol) == -1:
+                print('smile unable to be embedded by rdkit: ', 
+                          AllChem.EmbedMolecule(self.rdmol), self.smile)
+            else:
+                conf = self.rdmol.GetConformer()
+                self.xyz = conf.GetPositions()    
+        elif hasattr(self, 'qm9_block_xyz'):
+                self.xyz = self.qm9_block_xyz 
+        else: return
+               
     def create_distance(self, xyz):
         m = np.zeros((len(xyz), 3))
         for i, atom in enumerate(xyz):
@@ -148,8 +163,9 @@ class QM9Mol(Molecule):
         """
         self.in_file = in_file
         self.qm9_block = self.open_file(in_file)
-        self.smile = self.qm9_block[-2]    
+        self.smile = self.qm9_block[-2]
         self.n_atoms = int(self.qm9_block[0])
+        self.failed = False
         
         properties = self.qm9_block[1].strip().split('\t')[1:] #[float,...]
         for i, p in enumerate(properties):
@@ -166,8 +182,7 @@ class QM9Mol(Molecule):
             mulliken.append(np.reshape(np.asarray( #fix scientific notation
                 np.char.replace(stripped[4], '*^', 'e'), dtype=np.float32), -1))
 
-        self.atom_types = np.asarray(atom_types)
-        self.xyz = np.reshape(np.concatenate(xyz), (-1, 3))
+        self.qm9_block_xyz = np.reshape(np.concatenate(xyz), (-1, 3))
         self.mulliken = np.concatenate(mulliken, axis=0)
        
     
@@ -322,7 +337,15 @@ class QM9(CDataset):
                     del datadic[mol]
                     unchar += 1
                 except: continue
-            print('total uncharacterized molecules removed: ', unchar)       
+            print('total uncharacterized molecules removed: ', unchar)
+            
+            failed = []
+            for k, mol in datadic.items():
+                if mol.fail:
+                    failed.append(k)
+            print('total failed molecules: ', len(failed))
+            for i in failed:  del datadic[i]
+            
             print('total QM9 molecules created: ', len(datadic))
             
             if use_pickle:
