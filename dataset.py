@@ -10,6 +10,7 @@ import numpy as np
 
 from scipy import spatial as sp
 from scipy.io import loadmat
+from scipy.sparse import coo_matrix
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -73,23 +74,23 @@ class Molecule(ABC):
         'is_conjugated': [False, True],
         }
     
-    @abstractmethod
     def __init__(self, *args):
-        self.load_data(*args)
+        self.load_molecule(*args)
         
     @abstractmethod
     def __repr__(self):
         return self.mol_id
         
     @abstractmethod
-    def load_data(self, *args):
-        self.smile = None
-        self.mol_block = None
-        self.xyz = None
-        self.distance = None
-        self.atom_types = None
-        self.n_atoms = None
-        self.atomic_numbers = None
+    def load_molecule(self, *args):
+        self.smile
+        self.rdmol
+        self.mol_block
+        self.xyz
+        self.distance
+        self.atom_types
+        self.n_atoms
+        self.atomic_numbers
         
     def open_file(self, in_file):
         with open(in_file) as f:
@@ -102,7 +103,6 @@ class Molecule(ABC):
         self.rdmol = Chem.AddHs(Chem.MolFromSmiles(smile))
         
     def create_rdmol_data(self, rdmol):
-        
         atom_types = []
         atomic_numbers = []
         aromatic = []
@@ -151,13 +151,13 @@ class Molecule(ABC):
                 edge_indices += [[i, j], [j, i]]
                 edge_attrs += [e, e]
         
-        self.edge_index = np.reshape(np.asarray(edge_indices, dtype=np.int64), (2, -1))
+        self.edge_index = np.reshape(np.asarray(edge_indices, dtype=np.int64), (-1, 2))
         self.edge_attr = np.reshape(np.asarray(edge_attrs), (-1, 3))
         
         self.mol_block = Chem.MolToMolBlock(rdmol)
         self.n_atoms = np.asarray(rdmol.GetNumAtoms(), dtype=np.float32)
 
-    def create_adjacency(self, mol_block):
+    def adjacency_from_block(self, mol_block):
         """use the V2000 chemical table's (rdmol MolBlock) adjacency list to create a 
         nxn symetric matrix with 0, 1, 2 or 3 for bond type where n is the indexed 
         atom"""
@@ -173,15 +173,24 @@ class Molecule(ABC):
                 adjacency[(int(line[1])-1),(int(line[0])-1)] = int(line[2]) 
         return adjacency
     
-    def embed_rdmol(self):
-        if hasattr(self, 'rdmol'):
-            if AllChem.EmbedMolecule(self.rdmol) == -1:
-                return
-            else:
-                conf = self.rdmol.GetConformer()
-                self.xyz = conf.GetPositions()
+    def embed_rdmol(self, rdmol, n_conformers):
+        AllChem.EmbedMultipleConfs(rdmol, numConfs=n_conformers, maxAttempts=0, 
+                                   useRandomCoords=False, numThreads=0)
+
+    def xyz_from_rdkit(self, rdmol):
+        """embeds the rdkit molecule if possible (some molecules/smiles fail rdkit 
+        embedding) and then gets atom positions and sets it as the xyz attribute
+        TODO: load all the conformer xyz and choose among them at runtime (_get_features())
+        """
+        if rdmol.GetNumConformers() == 0:
+            return []
+        else:
+            confs = self.rdmol.GetConformers()
+            conf = random.choice(confs)
+            xyz = conf.GetPositions()
+            return xyz
                 
-    def create_distance(self, xyz):
+    def distance_from_xyz(self, xyz):
         m = np.zeros((len(xyz), 3))
         for i, atom in enumerate(xyz):
             m[i,:] = atom 
@@ -220,24 +229,18 @@ class QM9Mol(Molecule):
     properties = ['A','B','C','mu','alpha','homo','lumo', 
                   'gap','r2','zpve','U0','U','H','G','Cv',
                   'smile','n_atoms','xyz','mulliken']
-    
-    def __init__(self, in_file, db):
-        self.load_data(in_file, db)
-        self.rdmol_from_smile(self.smile)
-        self.create_rdmol_data(self.rdmol)
         
     def __repr__(self):
         return self.in_file[-20:-4]
     
-    def load_data(self, in_file, db):
-        """load from the .xyz files of the qm9 dataset
+    def molecule_from_qm9(self, in_file):
+        """load the data from the .xyz files of the qm9 dataset
         (http://quantum-machine.org/datasets/)
         """
         self.in_file = in_file
         self.qm9_block = self.open_file(in_file)
         self.smile = self.qm9_block[-2]
         self.n_atoms = int(self.qm9_block[0])
-        self.db = db
         
         properties = self.qm9_block[1].strip().split('\t')[1:] #[float,...]
         for i, p in enumerate(properties):
@@ -253,11 +256,29 @@ class QM9Mol(Molecule):
                 np.char.replace(stripped[1:4], '*^', 'e'), dtype=np.float32), -1))
             mulliken.append(np.reshape(np.asarray( #fix scientific notation
                 np.char.replace(stripped[4], '*^', 'e'), dtype=np.float32), -1))
-
-        self.qm9_block_xyz = np.reshape(np.concatenate(xyz), (-1, 3))
+        
+        self.atom_types = atom_types
         self.mulliken = np.concatenate(mulliken, axis=0)
-       
-    
+        self.qm9_xyz = np.reshape(np.concatenate(xyz), (-1, 3))
+        
+    def create_rdmol_data(self, rdmol):
+        self.mol_block = Chem.MolToMolBlock(rdmol)
+        self.n_atoms = np.asarray(rdmol.GetNumAtoms(), dtype=np.float32)
+        
+    def load_molecule(self, in_file, db, n_conformers=1):
+        self.molecule_from_qm9(in_file)
+        self.rdmol_from_smile(self.smile)
+        self.create_rdmol_data(self.rdmol)
+        self.adjacency = self.adjacency_from_block(self.mol_block)
+        if db in ['rdkit','both']:
+            self.embed_rdmol(self.rdmol, n_conformers)
+        self.xyz = self.xyz_from_rdkit(self.rdmol)
+        if len(self.xyz) == 0:
+            self.xyz = self.qm9_xyz
+        self.distance = self.distance_from_xyz(self.xyz)
+        self.coulomb = self.create_coulomb(self.distance, self.atom_types)
+
+        
 class QM9(CDataset):
     """http://quantum-machine.org
     
@@ -375,46 +396,58 @@ class QM9(CDataset):
             return data
         
     def load_data(self, in_dir='./data/qm9/qm9.xyz/', n=133885, filter_on=None, 
-                  use_pickle='qm9_datadic.p', dtype='float32', db='qm9'):
+                  use_pickle='qm9_datadic.p', dtype='float32', db='qm9', n_conformers=1):
         
         if use_pickle and os.path.exists('./data/qm9/'+use_pickle):
             print('loading QM9 datadic from a pickled copy...')
-            datadic = pickle.load(open('./data/qm9/'+use_pickle, 'rb'))
+            with open('./data/qm9/'+use_pickle, 'rb') as f:
+                datadic = pickle.loads(f)
         else:
             print('creating QM9 dataset...')
             datadic = {}
             scanned = 0
+            no_conf = 0
             for filename in sorted(os.listdir(in_dir)):
                 if filename.endswith('.xyz'):
-                    datadic[int(filename[-10:-4])] = QM9Mol(in_dir+filename, db)
+                    datadic[int(filename[-10:-4])] = QM9Mol(in_dir+filename, db, n_conformers)
                     scanned += 1
+
                     if filter_on is not None:
                         val = self._get_features(datadic[int(filename[-10:-4])], 
                                                      [filter_on[0]])
                         val = np.array2string(val, precision=4, floatmode='maxprec')[1:-1]
-                     
                         if not eval(val+filter_on[1]+filter_on[2]):
                             del datadic[int(filename[-10:-4])]
-                        
+                    #if smile has no conformer and db is rdkit only then discard
+                    if db == 'rdkit':
+                        if datadic[int(filename[-10:-4])].rdmol.GetNumConformers() == 0:
+                            del datadic[int(filename[-10:-4])]
+                            no_conf += 1
+        
                     if scanned % 1000 == 1:
-                        print('QM9 molecules scanned: ', scanned)
-                        print('QM9 molecules created: ', len(datadic))
+                        print('molecules scanned: ', scanned)
+                        print('molecules removed for no rdkit conformer: ', no_conf)
+                        print('molecules created: ', len(datadic))
                     if len(datadic) > n - 1:
                         break
             
             unchar = 0
             uncharacterized = self.get_uncharacterized()
             for mol in uncharacterized: 
-                try: 
+                if mol in datadic:
                     del datadic[mol]
                     unchar += 1
-                except: continue
+                    
+            print('total molecules scanned: ', scanned)
+            print('total molecules removed for no rdkit conformer: ', no_conf)
             print('total uncharacterized molecules removed: ', unchar)
-            print('total QM9 molecules created: ', len(datadic))
+            print('total molecules created: ', len(datadic))
             
             if use_pickle:
-                print('pickling a copy of the QM9 datadic...')        
-                pickle.dump(datadic, open('./data/qm9/'+use_pickle, 'wb'))
+                print('pickling a copy of the QM9 datadic...')
+                b = pickle.dumps(datadic)
+                with open('./data/qm9/'+use_pickle, 'wb') as f:
+                    f.write(b)
                 
         return datadic
     
@@ -430,7 +463,6 @@ class QM9(CDataset):
                         unchar.append(int(m))
         except:
             print('uncharaterized file missing...')
-   
         return unchar
         
         
