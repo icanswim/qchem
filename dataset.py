@@ -26,7 +26,7 @@ class Molecule(ABC):
     
     x_map = {
         'atomic_num':
-        list(range(0, 119)),
+            list(range(0, 119)),
         'chirality': [
             'CHI_UNSPECIFIED',
             'CHI_TETRAHEDRAL_CW',
@@ -34,13 +34,13 @@ class Molecule(ABC):
             'CHI_OTHER',
         ],
         'degree':
-        list(range(0, 11)),
+            list(range(0, 11)),
         'formal_charge':
-        list(range(-5, 7)),
+            list(range(-5, 7)),
         'num_hs':
-        list(range(0, 9)),
+            list(range(0, 9)),
         'num_radical_electrons':
-        list(range(0, 5)),
+            list(range(0, 5)),
         'hybridization': [
             'UNSPECIFIED',
             'S',
@@ -51,9 +51,8 @@ class Molecule(ABC):
             'SP3D2',
             'OTHER',
         ],
-        'is_aromatic': [False, True],
-        'is_in_ring': [False, True],
-        }
+        'is_aromatic': [False, True]
+    }
 
     e_map = {
         'bond_type': [
@@ -71,8 +70,13 @@ class Molecule(ABC):
             'STEREOTRANS',
             'STEREOANY',
         ],
-        'is_conjugated': [False, True],
+        'is_conjugated': [False, True],        
+        'is_in_ring': [False, True]
         }
+    
+    lookup = {'misc': 1,'SINGLE': 2, 'DOUBLE': 3, 'TRIPLE': 4, 'AROMATIC': 5, 
+               'STEREONONE': 6, 'STEREOZ': 7, 'STEREOE': 8, 'STEREOCIS': 9, 
+               'STEREOTRANS': 10, 'STEREOANY': 11}
     
     def __init__(self, *args):
         self.load_molecule(*args)
@@ -101,62 +105,9 @@ class Molecule(ABC):
         
     def rdmol_from_smile(self, smile):
         self.rdmol = Chem.AddHs(Chem.MolFromSmiles(smile))
+        self.mol_block = Chem.MolToMolBlock(self.rdmol)
+        self.n_atoms = np.asarray(self.rdmol.GetNumAtoms(), dtype=np.float32)
         
-    def create_rdmol_data(self, rdmol):
-        atom_types = []
-        atomic_numbers = []
-        aromatic = []
-        chirality = []
-        degree = []
-        charge = []
-        n_hs = []
-        n_rads = []
-        ring = []
-        hybridization = []
-        
-        for atom in rdmol.GetAtoms():
-            atom_types.append(atom.GetSymbol())
-            atomic_numbers.append(atom.GetAtomicNum()) 
-            aromatic.append(1 if atom.GetIsAromatic() else 0)
-            chirality.append(str(atom.GetChiralTag()))
-            degree.append(atom.GetTotalDegree())
-            charge.append(atom.GetFormalCharge())
-            n_hs.append(atom.GetTotalNumHs())
-            n_rads.append(atom.GetNumRadicalElectrons())
-            ring.append(atom.IsInRing)
-            hybridization.append(str(atom.GetHybridization()))
-            
-        self.atom_types = np.asarray(atom_types)
-        self.atomic_numbers = np.asarray(atomic_numbers, dtype=np.float32)
-        self.aromatic = np.asarray(aromatic)
-        self.chirality = np.asarray(chirality)
-        self.degree = np.asarray(degree)
-        self.charge = np.asarray(charge)
-        self.n_hs = np.asarray(n_hs)
-        self.n_rads = np.asarray(n_rads)
-        self.ring = np.asarray(ring)
-        self.hybridization = np.asarray(hybridization)
-        
-        for bond in rdmol.GetBonds():
-            edge_indices, edge_attrs = [], []
-            for bond in rdmol.GetBonds():
-                i = bond.GetBeginAtomIdx()
-                j = bond.GetEndAtomIdx()
-
-                e = []
-                e.append(str(bond.GetBondType()))
-                e.append(str(bond.GetStereo()))
-                e.append(bond.GetIsConjugated())
-
-                edge_indices += [[i, j], [j, i]]
-                edge_attrs += [e, e]
-        
-        self.edge_index = np.reshape(np.asarray(edge_indices, dtype=np.int64), (-1, 2))
-        self.edge_attr = np.reshape(np.asarray(edge_attrs), (-1, 3))
-        
-        self.mol_block = Chem.MolToMolBlock(rdmol)
-        self.n_atoms = np.asarray(rdmol.GetNumAtoms(), dtype=np.float32)
-
     def adjacency_from_block(self, mol_block):
         """use the V2000 chemical table's (rdmol MolBlock) adjacency list to create a 
         nxn symetric matrix with 0, 1, 2 or 3 for bond type where n is the indexed 
@@ -171,31 +122,78 @@ class Molecule(ABC):
                 adjacency[(int(line[0])-1),(int(line[1])-1)] = int(line[2]) 
                 # create bi-directional connection
                 adjacency[(int(line[1])-1),(int(line[0])-1)] = int(line[2]) 
-        return adjacency
+        self.adjacency = adjacency
     
     def embed_rdmol(self, rdmol, n_conformers):
         AllChem.EmbedMultipleConfs(rdmol, numConfs=n_conformers, maxAttempts=0, 
                                    useRandomCoords=False, numThreads=0)
+        
+    def create_rdmol_data(self, rdmol):
+        atom_types = []
+        atomic_numbers = []
+        aromatic = []
+        chirality = []
+        degree = []
+        charge = []
+        n_hs = []
+        n_rads = []
+        hybridization = []
+
+        for atom in rdmol.GetAtoms():
+            atom_types.append(atom.GetSymbol())
+            atomic_numbers.append(atom.GetAtomicNum()) 
+            aromatic.append(1 if atom.GetIsAromatic() else 0)
+            chirality.append(str(atom.GetChiralTag()))
+            degree.append(atom.GetTotalDegree())
+            charge.append(atom.GetFormalCharge())
+            n_hs.append(atom.GetTotalNumHs())
+            n_rads.append(atom.GetNumRadicalElectrons())
+            hybridization.append(str(atom.GetHybridization()))
+
+        self.atom_types = np.asarray(atom_types)
+        self.atomic_numbers = np.asarray(atomic_numbers, dtype=np.float32)
+        self.aromatic = np.asarray(aromatic)
+        self.chirality = np.asarray(chirality)
+        self.degree = np.asarray(degree)
+        self.charge = np.asarray(charge)
+        self.n_hs = np.asarray(n_hs)
+        self.n_rads = np.asarray(n_rads)
+        self.hybridization = np.asarray(hybridization)
+
+        for bond in rdmol.GetBonds():
+            edge_indices, edge_attrs = [], []
+            for bond in rdmol.GetBonds():
+                i = bond.GetBeginAtomIdx()
+                j = bond.GetEndAtomIdx()
+
+                e = []
+                e.append(Molecule.lookup[str(bond.GetBondType())])
+                e.append(Molecule.lookup[str(bond.GetStereo())])
+                e.append(1 if bond.GetIsConjugated() else 0)
+                e.append(1 if atom.IsInRing() else 0)
+
+                edge_indices += [[i, j], [j, i]]
+                edge_attrs += [e, e]
+
+        self.edge_indices = np.reshape(np.asarray(edge_indices, dtype=np.int64), (-1, 2))
+        self.edge_attr = np.reshape(np.asarray(edge_attrs), (-1, 4))
 
     def xyz_from_rdkit(self, rdmol):
-        """embeds the rdkit molecule if possible (some molecules/smiles fail rdkit 
-        embedding) and then gets atom positions and sets it as the xyz attribute
-        TODO: load all the conformer xyz and choose among them at runtime (_get_features())
+        """TODO: load all the conformer xyz and choose among them at runtime (_get_features())
         """
         if rdmol.GetNumConformers() == 0:
             return []
         else:
             confs = self.rdmol.GetConformers()
             conf = random.choice(confs)
-            xyz = conf.GetPositions()
-            return xyz
+            self.xyz = conf.GetPositions()
                 
     def distance_from_xyz(self, xyz):
         m = np.zeros((len(xyz), 3))
         for i, atom in enumerate(xyz):
             m[i,:] = atom 
-        distance = sp.distance.squareform(sp.distance.pdist(m)).astype('float32')
-        return distance
+        self.distance = sp.distance.squareform(sp.distance.pdist(m)).astype('float32')
+        
       
     def create_coulomb(self, distance, atom_types, sigma=1):
         """creates coulomb matrix obj attr.  set sigma to False to turn off random sorting.  
@@ -215,7 +213,7 @@ class Molecule(ABC):
             coulomb = self.sort_permute(coul, sigma)
         else:  
             coulomb = coul
-        return coulomb
+        self.coulomb = coulomb
     
     def sort_permute(self, matrix, sigma):
         norm = np.linalg.norm(matrix, axis=1)
@@ -240,7 +238,7 @@ class QM9Mol(Molecule):
         self.in_file = in_file
         self.qm9_block = self.open_file(in_file)
         self.smile = self.qm9_block[-2]
-        self.n_atoms = int(self.qm9_block[0])
+        self.qm9_n_atoms = int(self.qm9_block[0])
         
         properties = self.qm9_block[1].strip().split('\t')[1:] #[float,...]
         for i, p in enumerate(properties):
@@ -249,7 +247,7 @@ class QM9Mol(Molecule):
         atom_types = []
         xyz = []
         mulliken = []
-        for atom in self.qm9_block[2:self.n_atoms+2]:
+        for atom in self.qm9_block[2:self.qm9_n_atoms+2]:
             stripped = atom.strip().split('\t') #[['atom_type',x,y,z,mulliken],...] 
             atom_types.append(stripped[0])
             xyz.append(np.reshape(np.asarray( #fix scientific notation
@@ -257,28 +255,27 @@ class QM9Mol(Molecule):
             mulliken.append(np.reshape(np.asarray( #fix scientific notation
                 np.char.replace(stripped[4], '*^', 'e'), dtype=np.float32), -1))
         
-        self.atom_types = atom_types
+        self.atom_types = np.asarray(atom_types)
         self.mulliken = np.concatenate(mulliken, axis=0)
         self.qm9_xyz = np.reshape(np.concatenate(xyz), (-1, 3))
-        
-    def create_rdmol_data(self, rdmol):
-        self.mol_block = Chem.MolToMolBlock(rdmol)
-        self.n_atoms = np.asarray(rdmol.GetNumAtoms(), dtype=np.float32)
         
     def load_molecule(self, in_file, db, n_conformers=1):
         self.molecule_from_qm9(in_file)
         self.rdmol_from_smile(self.smile)
+        self.adjacency_from_block(self.mol_block)
         self.create_rdmol_data(self.rdmol)
-        self.adjacency = self.adjacency_from_block(self.mol_block)
+        
+        self.xyz = []
         if db in ['rdkit','both']:
             self.embed_rdmol(self.rdmol, n_conformers)
-        self.xyz = self.xyz_from_rdkit(self.rdmol)
+            self.xyz_from_rdkit(self.rdmol)
         if len(self.xyz) == 0:
             self.xyz = self.qm9_xyz
-        self.distance = self.distance_from_xyz(self.xyz)
-        self.coulomb = self.create_coulomb(self.distance, self.atom_types)
-
+            
+        self.distance_from_xyz(self.xyz)
+        self.create_coulomb(self.distance, self.atom_types)
         
+
 class QM9(CDataset):
     """http://quantum-machine.org
     
@@ -401,7 +398,7 @@ class QM9(CDataset):
         if use_pickle and os.path.exists('./data/qm9/'+use_pickle):
             print('loading QM9 datadic from a pickled copy...')
             with open('./data/qm9/'+use_pickle, 'rb') as f:
-                datadic = pickle.loads(f)
+                datadic = pickle.load(f)
         else:
             print('creating QM9 dataset...')
             datadic = {}
@@ -423,7 +420,7 @@ class QM9(CDataset):
                         if datadic[int(filename[-10:-4])].rdmol.GetNumConformers() == 0:
                             del datadic[int(filename[-10:-4])]
                             no_conf += 1
-        
+                    
                     if scanned % 1000 == 1:
                         print('molecules scanned: ', scanned)
                         print('molecules removed for no rdkit conformer: ', no_conf)
@@ -444,10 +441,8 @@ class QM9(CDataset):
             print('total molecules created: ', len(datadic))
             
             if use_pickle:
-                print('pickling a copy of the QM9 datadic...')
-                b = pickle.dumps(datadic)
                 with open('./data/qm9/'+use_pickle, 'wb') as f:
-                    f.write(b)
+                    pickle.dump(datadic, f)
                 
         return datadic
     
