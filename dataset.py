@@ -15,10 +15,6 @@ from scipy.sparse import coo_matrix
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from torch import as_tensor, cat
-
-from torch_geometric.data import Data
-
 
 class Molecule(ABC):
     """an abstract class with utilities for creating molecule instances"""
@@ -75,8 +71,8 @@ class Molecule(ABC):
         }
     
     lookup = {'misc': 1,'SINGLE': 2, 'DOUBLE': 3, 'TRIPLE': 4, 'AROMATIC': 5, 
-               'STEREONONE': 6, 'STEREOZ': 7, 'STEREOE': 8, 'STEREOCIS': 9, 
-               'STEREOTRANS': 10, 'STEREOANY': 11}
+              'STEREONONE': 6, 'STEREOZ': 7, 'STEREOE': 8, 'STEREOCIS': 9, 
+              'STEREOTRANS': 10, 'STEREOANY': 11}
     
     def __init__(self, *args):
         self.load_molecule(*args)
@@ -194,7 +190,6 @@ class Molecule(ABC):
             m[i,:] = atom 
         self.distance = sp.distance.squareform(sp.distance.pdist(m)).astype('float32')
         
-      
     def create_coulomb(self, distance, atom_types, sigma=1):
         """creates coulomb matrix obj attr.  set sigma to False to turn off random sorting.  
         sigma = stddev of gaussian noise.
