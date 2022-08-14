@@ -148,12 +148,12 @@ class Molecule(ABC):
 
         self.atom_types = np.asarray(atom_types)
         self.atomic_numbers = np.asarray(atomic_numbers, dtype=np.float32)
-        self.aromatic = np.asarray(aromatic)
+        self.aromatic = np.asarray(aromatic, dtype=np.float32)
         self.chirality = np.asarray(chirality)
-        self.degree = np.asarray(degree)
-        self.charge = np.asarray(charge)
-        self.n_hs = np.asarray(n_hs)
-        self.n_rads = np.asarray(n_rads)
+        self.degree = np.asarray(degree, dtype=np.float32)
+        self.charge = np.asarray(charge, dtype=np.float32)
+        self.n_hs = np.asarray(n_hs, dtype=np.float32)
+        self.n_rads = np.asarray(n_rads, dtype=np.float32)
         self.hybridization = np.asarray(hybridization)
 
         for bond in rdmol.GetBonds():
@@ -172,7 +172,7 @@ class Molecule(ABC):
                 edge_attrs += [e, e]
 
         self.edge_indices = np.reshape(np.asarray(edge_indices, dtype=np.int64), (-1, 2))
-        self.edge_attr = np.reshape(np.asarray(edge_attrs), (-1, 4))
+        self.edge_attr = np.reshape(np.asarray(edge_attrs, dtype=np.float32), (-1, 4))
 
     def xyz_from_rdkit(self, rdmol):
         """TODO: load all the conformer xyz and choose among them at runtime (_get_features())
@@ -539,7 +539,6 @@ class ANI1x(CDataset):
         self.criterion = criterion
         self.conformation = conformation
         super().__init__(**kwargs)        
-
         
     def __getitem__(self, i):
         X, embed_idx, y = [], [], []
