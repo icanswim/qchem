@@ -18,62 +18,16 @@ from rdkit.Chem import AllChem
 
 class Molecule(ABC):
     """an abstract class with utilities for creating molecule instances"""
-    atomic_n = {'C': 6, 'H': 1, 'N': 7, 'O': 8, 'F': 9}
-    
-    x_map = {
-        'atomic_num':
-            list(range(0, 119)),
-        'chirality': [
-            'CHI_UNSPECIFIED',
-            'CHI_TETRAHEDRAL_CW',
-            'CHI_TETRAHEDRAL_CCW',
-            'CHI_OTHER',
-        ],
-        'degree':
-            list(range(0, 11)),
-        'formal_charge':
-            list(range(-5, 7)),
-        'num_hs':
-            list(range(0, 9)),
-        'num_radical_electrons':
-            list(range(0, 5)),
-        'hybridization': [
-            'UNSPECIFIED',
-            'S',
-            'SP',
-            'SP2',
-            'SP3',
-            'SP3D',
-            'SP3D2',
-            'OTHER',
-        ],
-        'is_aromatic': [False, True]
-    }
-
-    e_map = {
-        'bond_type': [
-            'misc',
-            'SINGLE',
-            'DOUBLE',
-            'TRIPLE',
-            'AROMATIC',
-        ],
-        'stereo': [
-            'STEREONONE',
-            'STEREOZ',
-            'STEREOE',
-            'STEREOCIS',
-            'STEREOTRANS',
-            'STEREOANY',
-        ],
-        'is_conjugated': [False, True],        
-        'is_in_ring': [False, True]
-        }
-    
-    lookup = {'misc': 1,'SINGLE': 2, 'DOUBLE': 3, 'TRIPLE': 4, 'AROMATIC': 5, 
-              'STEREONONE': 6, 'STEREOZ': 7, 'STEREOE': 8, 'STEREOCIS': 9, 
-              'STEREOTRANS': 10, 'STEREOANY': 11}
-    
+    lookup = {'bond_type': {'misc':1, 'SINGLE':2, 'DOUBLE':3, 
+                            'TRIPLE':4, 'AROMATIC':5},
+              'stereo': {'STEREONONE':1, 'STEREOZ':2, 'STEREOE':3, 
+                         'STEREOCIS':4, 'STEREOTRANS':5, 'STEREOANY':6},
+              'atomic_n': {'C':6, 'H':1, 'N':7, 'O':8, 'F':9},
+              'hybridization': {'UNSPECIFIED':1, 'S':2, 'SP':3, 'SP2':4,
+                                'SP3':5, 'SP3D':6, 'SP3D2':7, 'OTHER':8},
+              'chirality': {'CHI_UNSPECIFIED':1, 'CHI_TETRAHEDRAL_CW':2,
+                            'CHI_TETRAHEDRAL_CCW':3, 'CHI_OTHER':4}}
+      
     def __init__(self, *args):
         self.load_molecule(*args)
         
@@ -163,8 +117,8 @@ class Molecule(ABC):
                 j = bond.GetEndAtomIdx()
 
                 e = []
-                e.append(Molecule.lookup[str(bond.GetBondType())])
-                e.append(Molecule.lookup[str(bond.GetStereo())])
+                e.append(Molecule.lookup['bond_type'][str(bond.GetBondType())])
+                e.append(Molecule.lookup['stereo'][str(bond.GetStereo())])
                 e.append(1 if bond.GetIsConjugated() else 0)
                 e.append(1 if atom.IsInRing() else 0)
 
@@ -197,7 +151,7 @@ class Molecule(ABC):
         molecules-for-atomization-energy-prediction"""
         atoms = []
         for atom in atom_types:
-            atoms.append(Molecule.atomic_n[atom]) 
+            atoms.append(Molecule.lookup['atomic_n'][atom]) 
         atoms = np.asarray(atoms, dtype='float32')
         qmat = atoms[None, :]*atoms[:, None]
         idmat = np.linalg.inv(distance)
@@ -375,7 +329,7 @@ class QM9(CDataset):
                     
             idx = []        
             for i in np.reshape(out, -1).tolist():
-                idx.append(np.reshape(np.asarray(embed_lookup[i]), -1).astype('int64'))
+                idx.append(np.reshape(np.asarray(embed_lookup[e][i]), -1).astype('int64'))
             embed_idx.append(np.concatenate(idx))
             
         return embed_idx
@@ -438,7 +392,10 @@ class QM9(CDataset):
             if use_pickle:
                 with open('./data/qm9/'+use_pickle, 'wb') as f:
                     pickle.dump(datadic, f)
-                
+        
+        self.embed_lookup = {'hybridization':{'UNSPECIFIED':1, 'S':2, 'SP':3, 'SP2':4, 
+                                        'SP3':5, 'SP3D':6, 'SP3D2':7, 'OTHER':8, '0':0}}
+        
         return datadic
     
     def get_uncharacterized(self, in_file='./data/qm9/uncharacterized.txt'):
