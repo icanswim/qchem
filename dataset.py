@@ -24,7 +24,7 @@ class Molecule():
                             'TRIPLE':4, 'AROMATIC':5},
               'stereo': {'STEREONONE':1, 'STEREOZ':2, 'STEREOE':3, 
                          'STEREOCIS':4, 'STEREOTRANS':5, 'STEREOANY':6},
-              'atomic_n': {'C':6, 'H':1, 'N':7, 'O':8, 'F':9},
+              'atomic_numbers': {'C':6, 'H':1, 'N':7, 'O':8, 'F':9},
               'hybridization': {'UNSPECIFIED':1, 'S':2, 'SP':3, 'SP2':4,
                                 'SP3':5, 'SP3D':6, 'SP3D2':7, 'OTHER':8},
               'chirality': {'CHI_UNSPECIFIED':1, 'CHI_TETRAHEDRAL_CW':2,
@@ -34,10 +34,6 @@ class Molecule():
                       'degree','charge','n_hs','n_rads','hybridization',
                       'edge_indices','edge_attr','rdmol_block','n_atoms',
                       'xyz','distance','coulomb','adjacency','rdmol']
-    
-    #@abstractmethod
-    #def __init__(self, *args):
-        #self.load_molecule(*args)
         
     @abstractmethod
     def __repr__(self):
@@ -154,20 +150,17 @@ class Molecule():
         distance = sp.distance.squareform(sp.distance.pdist(m)).astype('float32')
         return distance
         
-    def create_coulomb(self, distance, atom_types, sigma=1):
+    def create_coulomb(self, distance, atomic_numbers, sigma=1):
         """creates coulomb matrix obj attr.  set sigma to False to turn off random sorting.  
         sigma = stddev of gaussian noise.
         https://papers.nips.cc/paper/4830-learning-invariant-representations-of-\
         molecules-for-atomization-energy-prediction"""
-        atoms = []
-        for atom in atom_types:
-            atoms.append(Molecule.lookup['atomic_n'][atom]) 
-        atoms = np.asarray(atoms, dtype='float32')
-        qmat = atoms[None, :]*atoms[:, None]
+
+        qmat = atomic_numbers[None, :]*atomic_numbers[:, None]
         idmat = np.linalg.inv(distance)
         np.fill_diagonal(idmat, 0)
         coul = qmat@idmat
-        np.fill_diagonal(coul, 0.5 * atoms ** 2.4)
+        np.fill_diagonal(coul, 0.5 * atomic_numbers ** 2.4)
         if sigma:  
             coulomb = self.sort_permute(coul, sigma)
         else:  
@@ -217,6 +210,10 @@ class QM9Mol(Molecule):
             mulliken.append(np.reshape(np.asarray( #fix scientific notation
                 np.char.replace(stripped[4], '*^', 'e'), dtype=np.float32), -1))
         
+        atomic_numbers = []
+        for atom in atom_types:
+            atomic_numbers.append(Molecule.lookup['atomic_numbers'][atom]) 
+        self.qm9_atomic_numbers = np.asarray(atomic_numbers, dtype='float32')
         self.qm9_atom_types = np.asarray(atom_types)
         self.mulliken = np.concatenate(mulliken, axis=0)
         self.qm9_xyz = np.reshape(np.concatenate(xyz), (-1, 3))
@@ -243,7 +240,7 @@ class QM9Mol(Molecule):
                 xyz = self.qm9_xyz
         
         self.distance = self.distance_from_xyz(xyz)
-        self.coulomb = self.create_coulomb(self.distance, atom_types)
+        self.coulomb = self.create_coulomb(self.distance, self.qm9_atomic_numbers)
 
 
 class QM9(CDataset):
@@ -320,7 +317,7 @@ class QM9(CDataset):
         data = []
         for f in features:
             out = getattr(mol, f)
-            if f in self.pad_feats:
+            if f in self.pad_feats and self.pad:
                 out = np.pad(out, (0, (self.pad - out.shape[0])))            
             if self.flatten:
                 out = np.reshape(out, -1) 
@@ -340,7 +337,7 @@ class QM9(CDataset):
         for e in embeds:
             out = getattr(mol, e)
             
-            if e in self.pad_feats:
+            if e in self.pad_feats and self.pad:
                 out = np.pad(out, (0, (self.pad - out.shape[0])))
                     
             idx = []        
@@ -376,38 +373,37 @@ class QM9(CDataset):
             self.no_conf = []
             self.inconsistant = []
             for filename in sorted(os.listdir(in_dir)):
-                if filename.endswith('.xyz'):
+                if filename.endswith('.xyz'): #create the molecule
                     datadic[int(filename[-10:-4])] = QM9Mol(in_dir+filename, db, n_conformers)
                     scanned += 1
 
-                    if filter_on is not None:
+                    if filter_on is not None: #filter the molecule
                         val = self._get_features(datadic[int(filename[-10:-4])], 
                                                      [filter_on[0]])
                         val = np.array2string(val, precision=4, floatmode='maxprec')[1:-1]
                         if not eval(val+filter_on[1]+filter_on[2]):
                             del datadic[int(filename[-10:-4])]
+                            break
                     
-                    elif db in ['rdkit','both']:
-                        if not datadic[int(filename[-10:-4])].n_atoms == \
-                                    datadic[int(filename[-10:-4])].qm9_n_atoms:
-                            self.inconsistant.append(filename[-10:-4])
-                            del datadic[int(filename[-10:-4])]
-                        elif datadic[int(filename[-10:-4])].rdmol.GetNumConformers() == 0:
-                            self.no_conf.append(filename[-10:-4])
-                            if db == 'rdkit':
-                                del datadic[int(filename[-10:-4])]
+                if db == 'rdkit': #check rdkit conformer matches qm9
+                    if not datadic[int(filename[-10:-4])].n_atoms == \
+                                datadic[int(filename[-10:-4])].qm9_n_atoms:
+                        self.inconsistant.append(filename[-10:-4])
+                        del datadic[int(filename[-10:-4])]
+                    elif datadic[int(filename[-10:-4])].rdmol.GetNumConformers() == 0:
+                        self.no_conf.append(filename[-10:-4])
+                        del datadic[int(filename[-10:-4])]
                     
-                    if scanned % 1000 == 1:
-                        print('molecules scanned: ', scanned)
-                        if db == 'both':
-                            print('molecules with no rdkit conformer: ', len(self.no_conf))
-                        if db == 'rdkit':
-                            print('molecules removed for no rdkit conformer: ', len(self.no_conf))
-                            print('molecules removed for inconsistancy: ', len(self.inconsistant))
-                        print('molecules created: ', len(datadic))
-                        
-                    if len(datadic) > n - 1:
-                        break
+                if scanned % 1000 == 1:
+                    print('molecules scanned: ', scanned)
+
+                    if db == 'rdkit':
+                        print('molecules removed for no rdkit conformer: ', len(self.no_conf))
+                        print('molecules removed for inconsistancy: ', len(self.inconsistant))
+                    print('molecules created: ', len(datadic))
+
+                if len(datadic) > n - 1:
+                    break
             
             self.unchar = []
             uncharacterized = self.get_uncharacterized()
@@ -417,8 +413,6 @@ class QM9(CDataset):
                     self.unchar.append(mol)
                     
             print('total molecules scanned: ', scanned)
-            if db == 'both':
-                print('total molecules with no rdkit conformer: ', len(self.no_conf))
             if db == 'rdkit':
                 print('total molecules removed for inconsistancy: ', len(self.inconsistant))
                 print('total molecules removed for no rdkit conformer: ', len(self.no_conf))
@@ -553,18 +547,19 @@ class ANI1x(Molecule, CDataset):
             if f == 'atomic_numbers':
                 out = datadic[f]
             elif f == 'distance':
-                out = sp.distance.squareform(sp.distance.pdist(datadic[f][ci]))
-                out = out.astype('float32')
+                out = self.distance_from_xyz(datadic['coordinates'][ci])
+            elif f == 'coulomb':
+                distance = self.distance_from_xyz(datadic['coordinates'][ci])
+                atomic_n = datadic['atomic_numbers']
+                out = self.create_coulomb(distance, atomic_n)
             else:
                 out = datadic[f][ci]
                 
             if out.ndim == 0: #if value == nan
                 out = np.reshape(out, -1)    
-            if f in self.pad_feats:
+            if f in self.pad_feats and self.pad:
                 out = np.pad(out, (0, (self.pad - out.shape[0])))
             if self.flatten:
-                out = np.reshape(out, -1)
-            if self.flatten and f != 'distance': 
                 out = np.reshape(out, -1)
                 
             data.append(out)
@@ -594,12 +589,20 @@ class ANI1x(Molecule, CDataset):
         nan = False
         while not nan:
             for f in features:
-                if f in ['distance']: 
+                if f == 'distance': 
                     out = mol['coordinates'][()]
+                    f = 'coordinates'
+                elif f == 'coulomb':
+                    for q in ['atomic_numbers','coordinates']:
+                        _out = mol[q][()]
+                        if np.isnan(_out).any(): nan = True
+                        datadic[q] = _out.astype(dtype)
                 else: 
-                    out = mol[f][()]  
+                    out = mol[f][()]
+                    
                 if np.isnan(out).any(): nan = True
                 datadic[f] = out.astype(dtype)
+                
             return datadic, nan #returns datadic, nan=False
         return datadic, nan #breaks out returns datadic, nan=True
                     
@@ -795,8 +798,8 @@ class QM7X(Molecule, CDataset):
             elif f == 'coulomb':
                 out = mol['atXYZ'][()]
                 distance = sp.distance.squareform(sp.distance.pdist(out))
-                atomic_n = mol['atNUM'][()]
-                out = self.create_coulomb(distance, atomic_n)
+                atomic_numbers = mol['atNUM'][()]
+                out = self.create_coulomb(distance, atomic_numbers)
             else: 
                 out = mol[f][()]
             datadic[f] = out.astype(dtype)
