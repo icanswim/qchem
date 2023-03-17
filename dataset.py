@@ -742,7 +742,7 @@ class QM7X(Molecule, CDataset):
                   'eNN','ePBE0','ePBE0+MBD','eTS','eX','eXC','eXX','hCHG', 
                   'hDIP','hRAT','hVDIP','hVOL','mC6','mPOL','mTPOL','pbe0FOR', 
                   'sMIT','sRMSD','totFOR','vDIP','vEQ','vIQ','vTQ','vdwFOR','vdwR',
-                  'distance']
+                  'distance','coulomb']
         
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -773,6 +773,38 @@ class QM7X(Molecule, CDataset):
             
         return datadic
     
+    def __getitem__(self, i):         
+        """this func feeds the model's forward().  the structure of the input_dict 
+        determines the structure of the output datadict
+        keywords = 'criterion_input','embed'
+        """
+        #if multiple conformations one is randomly selected
+        conformations = list(self.ds[i].keys())
+        idconf = random.choice(conformations)
+        datadic = {}
+        for input_key in self.input_dict:
+            datadic[input_key] = {}
+            for output_key in self.input_dict[input_key]:
+                if output_key == 'embed':
+                    out = self._get_embed_idx(self.ds[i][idconf], 
+                                              self.input_dict[input_key][output_key], 
+                                              self.embed_lookup)
+                else:
+                    out = self._get_features(self.ds[i][idconf], 
+                                             self.input_dict[input_key][output_key])
+                    
+                    if input_key == 'criterion_input':
+                        for target_transform in self.target_transform:
+                            out = target_transform(out)
+                    else:
+                        for transform in self.transform:
+                            out = transform(out)
+                        
+                    if self.as_tensor: out = as_tensor(out)
+                datadic[input_key][output_key] = out
+                
+        return datadic
+    
     def _get_features(self, datadic, features):
         data = []
         for f in features:
@@ -794,18 +826,18 @@ class QM7X(Molecule, CDataset):
             
         return np.concatenate(data)
         
-    def _load_features(self, mol, features, dtype='float32'):
+    def _load_features(self, mol, dtype='float32'):
         datadic = {}
-        for f in features:
-            if f == 'distance':
+        for p in QM7X.properties:
+            if p == 'distance':
                 out = self.distance_from_xyz(mol['atXYZ'][()])
-            elif f == 'coulomb':
+            elif p == 'coulomb':
                 distance = self.distance_from_xyz(mol['atXYZ'][()])
                 atomic_number = mol['atNUM'][()]
                 out = self.create_coulomb(distance, atomic_number)
             else: 
-                out = mol[f][()]
-            datadic[f] = out.astype(dtype)
+                out = mol[p][()]
+            datadic[p] = out.astype(dtype)
         return datadic
         
     def load_data(self, selector='opt', in_dir='./data/qm7x/', n=6950):
@@ -829,9 +861,8 @@ class QM7X(Molecule, CDataset):
                         for attr in selector:
                             if re.search(attr, idconf):
                                 structure_count += 1
-                                features = self._load_features(f[idmol][idconf], 
-                                                               self.features+self.targets+self.embeds)
-                                datadic[int(idmol)][idconf] = features
+                                out = self._load_features(f[idmol][idconf])
+                                datadic[int(idmol)][idconf] = out
                                                                            
         print('molecular formula (idmol) mapped: ', len(datadic))
         print('total molecular structures (idconf) mapped: ', structure_count)
@@ -872,7 +903,7 @@ class QM7(CDataset):
         datadic = {}
         for i in range(7165):
             datadic[i] = {}
-            for f in self.features+self.embeds+self.targets:
+            for f in ['coulomb','xyz','atoms','ae','distance']:
                 if f in ['coulomb']:
                     out = ds['X'][i,:,:]
                 elif f in ['xyz']:
@@ -890,8 +921,6 @@ class QM7(CDataset):
                         xyz = padded #no padding (longest molecule)
                     out = sp.distance.squareform(sp.distance.pdist(xyz))
                     out = np.pad(out, ((0, 23-out.shape[0]), (0, 23-out.shape[1])))
-                else:
-                    NotImplemented('feature must be coulomb, xyz, atoms, ae and/or distance')
                     
                 if self.flatten: out = np.reshape(out, -1)
                 datadic[i].update({f: out})
@@ -933,15 +962,13 @@ class QM7b(CDataset):
         datadic = {}
         for i in range(7211):
             datadic[i] = {}
-            for f in self.features+self.embeds+self.targets:
+            for f in QM7b.properties:
                 if f in ['coulomb']:
                     datadic[i].update({f: ds['X'][i,:,:].astype('float32')})
                 elif f in ['E','alpha_p','alpha_s','HOMO_g','HOMO_p','HOMO_z',
                            'LUMO_g','LUMO_p','LUMO_z','IP','EA','E1','Emax','Imax']:
                     datadic[i].update({f: np.reshape(ds['T'][i,QM7b.properties.index(f)], 
-                                                                     -1).astype('float32')})
-                else:
-                    NotImplemented("feature not implemented")    
+                                                                     -1).astype('float32')})    
         return datadic
     
     
