@@ -459,15 +459,16 @@ class ANI1x(Molecule, CDataset):
     It is indexed by a molecular formula and conformation index
     
     This dataset is a pytorch and cosmosis dataset:
-    Returns [feature1,feature2,...,padding], [target1,target2,...]
+    Returns datadic['model_input']['X'] = [feature1,feature2,...,padding]
+            datadic['criterion_input']['target'] = [target1,target2,...]
     
     Longest molecule is 63 atoms
     
     select:
-        molecular formula
-        conformation
-        properties
-        target
+        criterion
+        conformation logic
+        input_dict['model_input']['X'] = ['property1','property2',...]
+        input_dict['criterion_input']['target'] = ['property3',...]
         padding
         data file location
     
@@ -477,13 +478,11 @@ class ANI1x(Molecule, CDataset):
         'max' - choose the index with the highest value
         'random' - choose the index randomly 
         int - choose the index int
-    properties = ['feature','feature',...]
-    targets = ['feature',...]
     pad = int/False
     
     Na = number of atoms, Nc = number of conformations
     Atomic Positions ‘coordinates’ Å float32 (Nc, Na, 3)
-    Atomic Numbers   ‘atomic_number’ — uint8 (Na)
+    Atomic Numbers   ‘atomic_numbers’ — uint8 (Na)
     Total Energy     ‘wb97x_dz.energy’ Ha float64 (Nc)
                      ‘wb97x_tz.energy’ Ha float64 (Nc)  
                      ‘ccsd(t)_cbs.energy’ Ha float64 (Nc)
@@ -510,9 +509,9 @@ class ANI1x(Molecule, CDataset):
     Atomic Volumes   ‘wb97x_tz.mbis_volumes’ a.u. float32 (Nc, Na)
     
     distance = (Na, Na) distance matrix constructed from 'coordinates' feature
-    coulomb = (Na, Na) coulomb matrix constructed from the 'distance' and 'atomic_number'
+    coulomb = (Na, Na) coulomb matrix constructed from the 'distance' and 'atomic_numbers'
     """
-    properties = ['atomic_number', 'ccsd(t)_cbs.energy', 'coordinates', 'hf_dz.energy',
+    properties = ['atomic_numbers', 'ccsd(t)_cbs.energy', 'coordinates', 'hf_dz.energy',
                   'hf_qz.energy', 'hf_tz.energy', 'mp2_dz.corr_energy', 'mp2_qz.corr_energy',
                   'mp2_tz.corr_energy', 'npno_ccsd(t)_dz.corr_energy', 'npno_ccsd(t)_tz.corr_energy',
                   'tpno_ccsd(t)_dz.corr_energy', 'wb97x_dz.cm5_charges', 'wb97x_dz.dipole', 
@@ -530,32 +529,31 @@ class ANI1x(Molecule, CDataset):
     def __getitem__(self, i):
         ci = self._get_conformation_index(self.ds[i])
         datadic = {}
-        if len(self.features) > 0:
-            X = self._get_features(self.ds[i], self.features, ci)
-            for transform in self.transform:
-                X = transform(X) 
-            if self.as_tensor: X = as_tensor(X)
-            datadic['X'] = X
-        
-        if len(self.targets) > 0:
-            y = self._get_features(self.ds[i], self.targets, ci)
-            for transform in self.target_transform:
-                y = transform(y)
-            if self.as_tensor: X = as_tensor(X)
-            datadic['y'] = y
-            
+        for input_key in self.input_dict:
+            datadic[input_key] = {}
+            for output_key in self.input_dict[input_key]:
+                out = self._get_features(self.ds[i], self.input_dict[input_key][output_key], ci)
+                if input_key == 'criterion_input':
+                    for target_transform in self.target_transform:
+                        out = target_transform(out)
+                else:
+                    for transform in self.transform:
+                        out = transform(out)
+                if self.as_tensor: out = as_tensor(out)
+            datadic[input_key][output_key] = out
+                   
         return datadic   
         
     def _get_features(self, datadic, features, ci):
         data = []
         for f in features:
-            if f == 'atomic_number':
+            if f == 'atomic_numbers':
                 out = datadic[f]
             elif f == 'distance':
                 out = self.distance_from_xyz(datadic['coordinates'][ci])
             elif f == 'coulomb':
                 distance = self.distance_from_xyz(datadic['coordinates'][ci])
-                atomic_n = datadic['atomic_number']
+                atomic_n = datadic['atomic_numbers']
                 out = self.create_coulomb(distance, atomic_n)
             else:
                 out = datadic[f][ci]
@@ -591,17 +589,17 @@ class ANI1x(Molecule, CDataset):
     
     def _load_features(self, mol, features, dtype='float32'):
         datadic = {}
-        nan = False
+        nan = False #ragged dataset, throws out molecule if it has nan values
         while not nan:
             for f in features:
                 if f == 'distance': 
                     out = mol['coordinates'][()]
                     f = 'coordinates'
-                elif f == 'coulomb':
-                    for q in ['atomic_number','coordinates']:
-                        _out = mol[q][()]
-                        if np.isnan(_out).any(): nan = True
-                        datadic[q] = _out.astype(dtype)
+                elif f == 'coulomb': #load the inputs for creating the coulomb
+                    for q in ['atomic_numbers','coordinates']:
+                        out = mol[q][()]
+                        if np.isnan(out).any(): nan = True
+                        datadic[q] = out.astype(dtype)
                 else: 
                     out = mol[f][()]
                     
@@ -629,8 +627,8 @@ class ANI1x(Molecule, CDataset):
         with h5py.File(in_file, 'r') as f:
             for mol in f.keys():
                 features, nan = self._load_features(f[mol], 
-                                                    self.criterion+self.features+\
-                                                    self.embeds+self.targets)
+                                                   self.input_dict['model_input']['X']+\
+                                                   self.input_dict['criterion_input']['target'])
                 if nan:
                     continue
                 else:
