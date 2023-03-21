@@ -13,6 +13,9 @@ From Machine Learning for Molecular Simulation
 
 
 ## References 
+ICLR 2021 Keynote: Geometric Deep Learning  
+https://youtu.be/w6Pw4MOzMuo 
+
 Geometric Deep Learning: Grids, Groups, Graphs, Geodesics, and Gauges  
 https://arxiv.org/abs/2104.13478 
 

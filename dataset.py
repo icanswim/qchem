@@ -14,23 +14,29 @@ from scipy.sparse import coo_matrix
 
 from torch import as_tensor
 
+from torch_geometric.data import Dataset
+
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
+#pytorch geometric is imported by its wrapper class PGDS
+
 
 class Molecule():
-    """an abstract class with utilities for creating molecule instances"""
-    lookup = {'bond_type': {'misc':1, 'SINGLE':2, 'DOUBLE':3, 
-                            'TRIPLE':4, 'AROMATIC':5},
-              'stereo': {'STEREONONE':1, 'STEREOZ':2, 'STEREOE':3, 
-                         'STEREOCIS':4, 'STEREOTRANS':5, 'STEREOANY':6},
-              'atomic_numbers': {'C':6, 'H':1, 'N':7, 'O':8, 'F':9},
-              'hybridization': {'UNSPECIFIED':1, 'S':2, 'SP':3, 'SP2':4,
-                                'SP3':5, 'SP3D':6, 'SP3D2':7, 'OTHER':8},
-              'chirality': {'CHI_UNSPECIFIED':1, 'CHI_TETRAHEDRAL_CW':2,
-                            'CHI_TETRAHEDRAL_CCW':3, 'CHI_OTHER':4}}
+    """an abstract class with utilities for creating molecule instances
+    or as a mixin"""
     
-    rdkit_features = ['atom_types','atomic_numbers','aromatic','chirality',
+    embed_lookup = {'hybridization': {'UNSPECIFIED':1, 'S':2, 'SP':3, 'SP2':4,
+                                      'SP3':5, 'SP3D':6, 'SP3D2':7, 'OTHER':8, '0':0},
+                    'chirality': {'CHI_UNSPECIFIED':1, 'CHI_TETRAHEDRAL_CW':2,
+                                  'CHI_TETRAHEDRAL_CCW':3, 'CHI_OTHER':4, '0':0},
+                    'bond_type': {'misc':1, 'SINGLE':2, 'DOUBLE':3, 
+                                  'TRIPLE':4, 'AROMATIC':5, '0':0},
+                    'stereo': {'STEREONONE':1, 'STEREOZ':2, 'STEREOE':3, 
+                               'STEREOCIS':4, 'STEREOTRANS':5, 'STEREOANY':6, '0':0},
+                    'atom_type': {'C':1, 'H':2, 'N':3, 'O':4, 'F':5, '0':0}}
+    
+    rdkit_features = ['atom_type','atomic_number','aromatic','chirality',
                       'degree','charge','n_hs','n_rads','hybridization',
                       'edge_indices','edge_attr','rdmol_block','n_atoms',
                       'xyz','distance','coulomb','adjacency','rdmol']
@@ -46,9 +52,9 @@ class Molecule():
         self.mol_block
         self.xyz
         self.distance
-        self.atom_types
+        self.atom_type
         self.n_atoms
-        self.atomic_numbers
+        self.atomic_number
         
     def open_file(self, in_file):
         with open(in_file) as f:
@@ -80,8 +86,8 @@ class Molecule():
                                    useRandomCoords=False, numThreads=0)
         
     def create_rdmol_data(self, rdmol):
-        atom_types = []
-        atomic_numbers = []
+        atom_type = []
+        atomic_number = []
         aromatic = []
         chirality = []
         degree = []
@@ -91,8 +97,8 @@ class Molecule():
         hybridization = []
 
         for atom in rdmol.GetAtoms():
-            atom_types.append(atom.GetSymbol())
-            atomic_numbers.append(atom.GetAtomicNum()) 
+            atom_type.append(atom.GetSymbol())
+            atomic_number.append(atom.GetAtomicNum()) 
             aromatic.append(1 if atom.GetIsAromatic() else 0)
             chirality.append(str(atom.GetChiralTag()))
             degree.append(atom.GetTotalDegree())
@@ -101,8 +107,8 @@ class Molecule():
             n_rads.append(atom.GetNumRadicalElectrons())
             hybridization.append(str(atom.GetHybridization()))
 
-        self.atom_types = np.asarray(atom_types)
-        self.atomic_numbers = np.asarray(atomic_numbers, dtype=np.float32)
+        self.atom_type = np.asarray(atom_type)
+        self.atomic_number = np.asarray(atomic_number, dtype=np.float32)
         self.aromatic = np.asarray(aromatic, dtype=np.float32)
         self.chirality = np.asarray(chirality)
         self.degree = np.asarray(degree, dtype=np.float32)
@@ -118,8 +124,8 @@ class Molecule():
                 j = bond.GetEndAtomIdx()
 
                 e = []
-                e.append(Molecule.lookup['bond_type'][str(bond.GetBondType())])
-                e.append(Molecule.lookup['stereo'][str(bond.GetStereo())])
+                e.append(Molecule.embed_lookup['bond_type'][str(bond.GetBondType())])
+                e.append(Molecule.embed_lookup['stereo'][str(bond.GetStereo())])
                 e.append(1 if bond.GetIsConjugated() else 0)
                 e.append(1 if atom.IsInRing() else 0)
 
@@ -150,17 +156,17 @@ class Molecule():
         distance = sp.distance.squareform(sp.distance.pdist(m)).astype('float32')
         return distance
         
-    def create_coulomb(self, distance, atomic_numbers, sigma=1):
+    def create_coulomb(self, distance, atomic_number, sigma=1):
         """creates coulomb matrix obj attr.  set sigma to False to turn off random sorting.  
         sigma = stddev of gaussian noise.
         https://papers.nips.cc/paper/4830-learning-invariant-representations-of-\
         molecules-for-atomization-energy-prediction"""
 
-        qmat = atomic_numbers[None, :]*atomic_numbers[:, None]
+        qmat = atomic_number[None, :]*atomic_number[:, None]
         idmat = np.linalg.inv(distance)
         np.fill_diagonal(idmat, 0)
         coul = qmat@idmat
-        np.fill_diagonal(coul, 0.5 * atomic_numbers ** 2.4)
+        np.fill_diagonal(coul, 0.5 * atomic_number ** 2.4)
         if sigma:  
             coulomb = self.sort_permute(coul, sigma)
         else:  
@@ -177,7 +183,7 @@ class Molecule():
 class QM9Mol(Molecule):
     
     qm9_features = ['A','B','C','mu','alpha','homo','lumo', 'gap','r2','zpve',
-                    'U0','U','H','G','Cv','qm9_n_atoms','qm9_block','qm9_atom_types',
+                    'U0','U','H','G','Cv','qm9_n_atoms','qm9_block','qm9_atom_type',
                     'qm9_xyz','mulliken','in_file','smile','distance','coulomb']
     
     def __init__(self, *args):
@@ -195,26 +201,28 @@ class QM9Mol(Molecule):
         self.smile = self.qm9_block[-2]
         self.qm9_n_atoms = int(self.qm9_block[0])
         
+        an_lookup = {'H':1, 'C':6, 'N':7, 'O':8, 'F':8, '0':0}
+        
         _features = self.qm9_block[1].strip().split('\t')[1:] #[float,...]
         for i, p in enumerate(_features):
             setattr(self, QM9Mol.qm9_features[i], np.reshape(np.asarray(p, 'float32'), -1))
             
-        atom_types = []
+        atom_type = []
         xyz = []
         mulliken = []
         for atom in self.qm9_block[2:self.qm9_n_atoms+2]:
             stripped = atom.strip().split('\t') #[['atom_type',x,y,z,mulliken],...] 
-            atom_types.append(stripped[0])
+            atom_type.append(stripped[0])
             xyz.append(np.reshape(np.asarray( #fix scientific notation
                 np.char.replace(stripped[1:4], '*^', 'e'), dtype=np.float32), -1))
             mulliken.append(np.reshape(np.asarray( #fix scientific notation
                 np.char.replace(stripped[4], '*^', 'e'), dtype=np.float32), -1))
         
-        atomic_numbers = []
-        for atom in atom_types:
-            atomic_numbers.append(Molecule.lookup['atomic_numbers'][atom]) 
-        self.qm9_atomic_numbers = np.asarray(atomic_numbers, dtype='float32')
-        self.qm9_atom_types = np.asarray(atom_types)
+        atomic_number = []
+        for atom in atom_type:
+            atomic_number.append(an_lookup[atom]) 
+        self.qm9_atomic_number = np.asarray(atomic_number, dtype='float32')
+        self.qm9_atom_type = np.asarray(atom_type)
         self.mulliken = np.concatenate(mulliken, axis=0)
         self.qm9_xyz = np.reshape(np.concatenate(xyz), (-1, 3))
         
@@ -225,12 +233,12 @@ class QM9Mol(Molecule):
         if db == 'qm9':
             block = self.qm9_block
             xyz = self.qm9_xyz
-            atom_types = self.qm9_atom_types
+            atom_type = self.qm9_atom_type
         else: 
             self.rdmol_from_smile(self.smile)
             self.create_rdmol_data(self.rdmol)
             block = self.rdmol_block
-            atom_types = self.atom_types
+            atom_type = self.atom_type
             self.embed_rdmol(self.rdmol, n_conformers)
             if not self.rdmol.GetNumConformers() == 0:
                 self.xyz = self.xyz_from_rdmol(self.rdmol)
@@ -239,8 +247,9 @@ class QM9Mol(Molecule):
             else:
                 xyz = self.qm9_xyz
         
+        self.atom_type = atom_type
         self.distance = self.distance_from_xyz(xyz)
-        self.coulomb = self.create_coulomb(self.distance, self.qm9_atomic_numbers)
+        self.coulomb = self.create_coulomb(self.distance, self.qm9_atomic_number)
 
 
 class QM9(CDataset):
@@ -336,10 +345,8 @@ class QM9(CDataset):
         embed_idx = []
         for e in embeds:
             out = getattr(mol, e)
-            
             if e in self.pad_feats and self.pad:
                 out = np.pad(out, (0, (self.pad - out.shape[0])))
-                    
             idx = []        
             for i in np.reshape(out, -1).tolist():
                 idx.append(np.reshape(np.asarray(embed_lookup[e][i]), -1).astype('int64'))
@@ -357,10 +364,7 @@ class QM9(CDataset):
     def load_data(self, in_dir='./data/qm9/qm9.xyz/', n=133885, filter_on=None, 
                   use_pickle='qm9_datadic.p', dtype='float32', db='qm9', n_conformers=1):
         
-        self.embed_lookup = {'hybridization': {'UNSPECIFIED':1, 'S':2, 'SP':3, 'SP2':4,
-                                               'SP3':5, 'SP3D':6, 'SP3D2':7, 'OTHER':8, '0':0},
-                             'chirality': {'CHI_UNSPECIFIED':1, 'CHI_TETRAHEDRAL_CW':2,
-                                           'CHI_TETRAHEDRAL_CCW':3, 'CHI_OTHER':4, '0':0}}
+        self.embed_lookup = Molecule.embed_lookup
         
         if use_pickle and os.path.exists('./data/qm9/'+use_pickle):
             print('loading QM9 datadic from a pickled copy...')
@@ -455,15 +459,16 @@ class ANI1x(Molecule, CDataset):
     It is indexed by a molecular formula and conformation index
     
     This dataset is a pytorch and cosmosis dataset:
-    Returns [feature1,feature2,...,padding], [target1,target2,...]
+    Returns datadic['model_input']['X'] = [feature1,feature2,...,padding]
+            datadic['criterion_input']['target'] = [target1,target2,...]
     
     Longest molecule is 63 atoms
     
     select:
-        molecular formula
-        conformation
-        properties
-        target
+        criterion
+        conformation logic
+        input_dict['model_input']['X'] = ['property1','property2',...]
+        input_dict['criterion_input']['target'] = ['property3',...]
         padding
         data file location
     
@@ -473,8 +478,6 @@ class ANI1x(Molecule, CDataset):
         'max' - choose the index with the highest value
         'random' - choose the index randomly 
         int - choose the index int
-    properties = ['feature','feature',...]
-    targets = ['feature',...]
     pad = int/False
     
     Na = number of atoms, Nc = number of conformations
@@ -506,6 +509,7 @@ class ANI1x(Molecule, CDataset):
     Atomic Volumes   ‘wb97x_tz.mbis_volumes’ a.u. float32 (Nc, Na)
     
     distance = (Na, Na) distance matrix constructed from 'coordinates' feature
+    coulomb = (Na, Na) coulomb matrix constructed from the 'distance' and 'atomic_numbers'
     """
     properties = ['atomic_numbers', 'ccsd(t)_cbs.energy', 'coordinates', 'hf_dz.energy',
                   'hf_qz.energy', 'hf_tz.energy', 'mp2_dz.corr_energy', 'mp2_qz.corr_energy',
@@ -525,20 +529,19 @@ class ANI1x(Molecule, CDataset):
     def __getitem__(self, i):
         ci = self._get_conformation_index(self.ds[i])
         datadic = {}
-        if len(self.features) > 0:
-            X = self._get_features(self.ds[i], self.features, ci)
-            for transform in self.transform:
-                X = transform(X) 
-            if self.as_tensor: X = as_tensor(X)
-            datadic['X'] = X
-        
-        if len(self.targets) > 0:
-            y = self._get_features(self.ds[i], self.targets, ci)
-            for transform in self.target_transform:
-                y = transform(y)
-            if self.as_tensor: X = as_tensor(X)
-            datadic['y'] = y
-            
+        for input_key in self.input_dict:
+            datadic[input_key] = {}
+            for output_key in self.input_dict[input_key]:
+                out = self._get_features(self.ds[i], self.input_dict[input_key][output_key], ci)
+                if input_key == 'criterion_input':
+                    for target_transform in self.target_transform:
+                        out = target_transform(out)
+                else:
+                    for transform in self.transform:
+                        out = transform(out)
+                if self.as_tensor: out = as_tensor(out)
+            datadic[input_key][output_key] = out
+                   
         return datadic   
         
     def _get_features(self, datadic, features, ci):
@@ -586,17 +589,17 @@ class ANI1x(Molecule, CDataset):
     
     def _load_features(self, mol, features, dtype='float32'):
         datadic = {}
-        nan = False
+        nan = False #ragged dataset, throws out molecule if it has nan values
         while not nan:
             for f in features:
                 if f == 'distance': 
                     out = mol['coordinates'][()]
                     f = 'coordinates'
-                elif f == 'coulomb':
+                elif f == 'coulomb': #load the inputs for creating the coulomb
                     for q in ['atomic_numbers','coordinates']:
-                        _out = mol[q][()]
-                        if np.isnan(_out).any(): nan = True
-                        datadic[q] = _out.astype(dtype)
+                        out = mol[q][()]
+                        if np.isnan(out).any(): nan = True
+                        datadic[q] = out.astype(dtype)
                 else: 
                     out = mol[f][()]
                     
@@ -624,8 +627,8 @@ class ANI1x(Molecule, CDataset):
         with h5py.File(in_file, 'r') as f:
             for mol in f.keys():
                 features, nan = self._load_features(f[mol], 
-                                                    self.criterion+self.features+\
-                                                    self.embeds+self.targets)
+                                                   self.input_dict['model_input']['X']+\
+                                                   self.input_dict['criterion_input']['target'])
                 if nan:
                     continue
                 else:
@@ -737,7 +740,7 @@ class QM7X(Molecule, CDataset):
                   'eNN','ePBE0','ePBE0+MBD','eTS','eX','eXC','eXX','hCHG', 
                   'hDIP','hRAT','hVDIP','hVOL','mC6','mPOL','mTPOL','pbe0FOR', 
                   'sMIT','sRMSD','totFOR','vDIP','vEQ','vIQ','vTQ','vdwFOR','vdwR',
-                  'distance']
+                  'distance','coulomb']
         
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -768,6 +771,38 @@ class QM7X(Molecule, CDataset):
             
         return datadic
     
+    def __getitem__(self, i):         
+        """this func feeds the model's forward().  the structure of the input_dict 
+        determines the structure of the output datadict
+        keywords = 'criterion_input','embed'
+        """
+        #if multiple conformations one is randomly selected
+        conformations = list(self.ds[i].keys())
+        idconf = random.choice(conformations)
+        datadic = {}
+        for input_key in self.input_dict:
+            datadic[input_key] = {}
+            for output_key in self.input_dict[input_key]:
+                if output_key == 'embed':
+                    out = self._get_embed_idx(self.ds[i][idconf], 
+                                              self.input_dict[input_key][output_key], 
+                                              self.embed_lookup)
+                else:
+                    out = self._get_features(self.ds[i][idconf], 
+                                             self.input_dict[input_key][output_key])
+                    
+                    if input_key == 'criterion_input':
+                        for target_transform in self.target_transform:
+                            out = target_transform(out)
+                    else:
+                        for transform in self.transform:
+                            out = transform(out)
+                        
+                    if self.as_tensor: out = as_tensor(out)
+                datadic[input_key][output_key] = out
+                
+        return datadic
+    
     def _get_features(self, datadic, features):
         data = []
         for f in features:
@@ -789,25 +824,24 @@ class QM7X(Molecule, CDataset):
             
         return np.concatenate(data)
         
-    def _load_features(self, mol, features, dtype='float32'):
+    def _load_features(self, mol, dtype='float32'):
         datadic = {}
-        for f in features:
-            if f == 'distance': 
-                out = mol['atXYZ'][()]
-                out = sp.distance.squareform(sp.distance.pdist(out))
-            elif f == 'coulomb':
-                out = mol['atXYZ'][()]
-                distance = sp.distance.squareform(sp.distance.pdist(out))
-                atomic_numbers = mol['atNUM'][()]
-                out = self.create_coulomb(distance, atomic_numbers)
+        for p in QM7X.properties:
+            if p == 'distance':
+                out = self.distance_from_xyz(mol['atXYZ'][()])
+            elif p == 'coulomb':
+                distance = self.distance_from_xyz(mol['atXYZ'][()])
+                atomic_number = mol['atNUM'][()]
+                out = self.create_coulomb(distance, atomic_number)
             else: 
-                out = mol[f][()]
-            datadic[f] = out.astype(dtype)
+                out = mol[p][()]
+            datadic[p] = out.astype(dtype)
         return datadic
         
-    def load_data(self, selector='opt', in_dir='./data/qm7x/'):
+    def load_data(self, selector='opt', in_dir='./data/qm7x/', n=6950):
         """seletor = list of regular expression strings (attr) for searching 
-        and selecting idconf keys.  
+        and selecting idconf keys.
+        n = non-random subset for testing
         returns datadic[idmol] = {'idconf': {'feature': val}}
         idconf = ID configuration (e.g., 'Geom-m1-i1-c1-opt', 'Geom-m1-i1-c1-50')
         datadic[idmol][idconf][feature]
@@ -818,14 +852,15 @@ class QM7X(Molecule, CDataset):
             with h5py.File(in_dir+set_id+'.hdf5', 'r') as f:
                 print('mapping... ', f)
                 for idmol in f:
+                    if len(datadic) > n - 1:  
+                        break
                     datadic[int(idmol)] = {}
                     for idconf in f[idmol]:
                         for attr in selector:
                             if re.search(attr, idconf):
                                 structure_count += 1
-                                features = self._load_features(f[idmol][idconf], 
-                                                               self.features+self.targets+self.embeds)
-                                datadic[int(idmol)][idconf] = features
+                                out = self._load_features(f[idmol][idconf])
+                                datadic[int(idmol)][idconf] = out
                                                                            
         print('molecular formula (idmol) mapped: ', len(datadic))
         print('total molecular structures (idconf) mapped: ', structure_count)
@@ -866,7 +901,7 @@ class QM7(CDataset):
         datadic = {}
         for i in range(7165):
             datadic[i] = {}
-            for f in self.features+self.embeds+self.targets:
+            for f in ['coulomb','xyz','atoms','ae','distance']:
                 if f in ['coulomb']:
                     out = ds['X'][i,:,:]
                 elif f in ['xyz']:
@@ -884,8 +919,6 @@ class QM7(CDataset):
                         xyz = padded #no padding (longest molecule)
                     out = sp.distance.squareform(sp.distance.pdist(xyz))
                     out = np.pad(out, ((0, 23-out.shape[0]), (0, 23-out.shape[1])))
-                else:
-                    NotImplemented('feature must be coulomb, xyz, atoms, ae and/or distance')
                     
                 if self.flatten: out = np.reshape(out, -1)
                 datadic[i].update({f: out})
@@ -927,15 +960,38 @@ class QM7b(CDataset):
         datadic = {}
         for i in range(7211):
             datadic[i] = {}
-            for f in self.features+self.embeds+self.targets:
+            for f in QM7b.properties:
                 if f in ['coulomb']:
                     datadic[i].update({f: ds['X'][i,:,:].astype('float32')})
                 elif f in ['E','alpha_p','alpha_s','HOMO_g','HOMO_p','HOMO_z',
                            'LUMO_g','LUMO_p','LUMO_z','IP','EA','E1','Emax','Imax']:
                     datadic[i].update({f: np.reshape(ds['T'][i,QM7b.properties.index(f)], 
-                                                                     -1).astype('float32')})
-                else:
-                    NotImplemented("feature not implemented")    
+                                                                     -1).astype('float32')})    
         return datadic
+    
+    
+class PGDS(CDataset):
+    """A wrapper for the PyG datasets
+    https://pytorch-geometric.readthedocs.io/en/latest/modules/datasets.html
+    dataset = pyg dataset name str
+    pg_params = pyg dataset parameters dict
+    use_pyg = return the pyg data class object or CDataset dict
+    """
+    def __init__(self, **kwargs):
+        print('creating pytorch geometric {} dataset...'.format(kwargs['dataset']))
+        super().__init__(**kwargs)
+        
+    def __getitem__(self, i):
+        if not self.use_pyg:
+            return super().__getitem__(i)
+        else:
+            return self.ds.__getitem__(i)
+        
+    def load_data(self, dataset, pg_params, use_pyg=True):
+        from torch_geometric import datasets as pgds
+        ds = getattr(pgds, dataset)(**pg_params)
+        self.ds_idx = list(range(len(ds)))
+        self.use_pyg = use_pyg
+        return ds
                 
           
