@@ -19,8 +19,8 @@ from torch_geometric.data import Dataset
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-#pytorch geometric is imported by its wrapper class PGDS
-
+from torch_geometric import datasets as pgds
+from torch_geometric.data import Data
 
 class Molecule():
     """an abstract class with utilities for creating molecule instances
@@ -55,6 +55,9 @@ class Molecule():
         self.atom_type
         self.n_atoms
         self.atomic_number
+    
+    def __init__(self):
+        super().__init__()
         
     def open_file(self, in_file):
         with open(in_file) as f:
@@ -226,7 +229,7 @@ class QM9Mol(Molecule):
         self.mulliken = np.concatenate(mulliken, axis=0)
         self.qm9_xyz = np.reshape(np.concatenate(xyz), (-1, 3))
         
-    def load_molecule(self, in_file, db, n_conformers=1):
+    def load_molecule(self, in_file='', db='qm9', n_conformers=1):
         
         self.create_qm9_data(in_file)
         
@@ -327,7 +330,7 @@ class QM9(CDataset):
         for f in features:
             out = getattr(mol, f)
             if f in self.pad_feats and self.pad:
-                out = np.pad(out, (0, (self.pad - out.shape[0])))            
+                out = np.pad(out, (0, (self.pad - out.shape[0])))
             if self.flatten:
                 out = np.reshape(out, -1) 
             data.append(out)
@@ -444,7 +447,7 @@ class QM9(CDataset):
         return unchar
         
         
-class ANI1x(Molecule, CDataset):
+class ANI1x(CDataset, Molecule):
     """https://www.nature.com/articles/s41597-020-0473-z#Sec11
     https://github.com/aiqm/ANI1x_datasets
     
@@ -640,7 +643,7 @@ class ANI1x(Molecule, CDataset):
         return datadic    
 
                 
-class QM7X(Molecule, CDataset):
+class QM7X(CDataset, Molecule):
     """QM7-X: A comprehensive dataset of quantum-mechanical properties spanning 
     the chemical space of small organic molecules
     https://arxiv.org/abs/2006.15139
@@ -988,7 +991,6 @@ class PGDS(CDataset):
             return self.ds.__getitem__(i)
         
     def load_data(self, dataset, pg_params, use_pyg=True):
-        from torch_geometric import datasets as pgds
         ds = getattr(pgds, dataset)(**pg_params)
         self.ds_idx = list(range(len(ds)))
         self.use_pyg = use_pyg
