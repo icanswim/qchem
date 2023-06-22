@@ -5,7 +5,7 @@ From Machine Learning for Molecular Simulation
 >In 1929 Paul Dirac stated that: “The underlying physical laws necessary for the mathematical theory of a large part of physics and the whole of chemistry are thus completely known, and the difficulty is only that the exact application of these laws leads to equations much too complicated to be soluble.  It therefore becomes desirable that approximate practical methods of applying quantum mechanics should be developed, which can lead to an explanation of the main features of complex atomic systems without too much computation.”  Ninety years later,  this quote is still state of the art.  However, in the last decade, new tools from the rapidly developing field of machine learning (ML) have started to make significant impact on the development of approximate methods for complex atomic systems, bypassing the direct solution of “equations much too complicated to be soluble”.
 
 ## Datasets, models and learners implemented in pytorch 
-* light weight, modular, extentable
+* light weight, modular, extendable
 * pytorch=1.8, pytorch_geometric, cuda=10.2, python=3.8
 * uses the icanswim/cosmosis datascience repo for rapid prototyping
 * see setup_notes.txt for implementation details
