@@ -1,4 +1,4 @@
-# qchem 
+# qchem
 An exploration of the state of the art in the application of datascience to molecular quantum mechanics. 
 
 From Machine Learning for Molecular Simulation  
@@ -6,8 +6,8 @@ From Machine Learning for Molecular Simulation
 
 ## Datasets, models and learners implemented in pytorch 
 * light weight, modular, extendable
-* pytorch=1.8, pytorch_geometric, cuda=10.2, python=3.8
-* uses the icanswim/cosmosis datascience repo for rapid prototyping
+* pytorch=2.0.1, pyg=2.3.0, cuda=11.8, python=3.9
+* uses the icanswim/cosmosis-main datascience repo for rapid prototyping
 * see setup_notes.txt for implementation details
 * see experiment.ipynb for examples
 
