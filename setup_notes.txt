@@ -3,22 +3,29 @@
 ##create a new qchem conda enviornment and folders
 git clone https://github.com/icanswim/cosmosis.git
 git clone https://github.com/icanswim/qchem.git
+cd cosmosis
+git checkout pytorch18
+cd ..
 cd qchem
+git checkout rdkit
 mkdir data
 mkdir logs
 mkdir models
 conda env create -f environment.yml
-conda activate qchem
+conda activate qchem-rdkit
 jupyter lab
 
 ##manual creation of conda enviornment and folders
 git clone https://github.com/icanswim/cosmosis.git
 git clone https://github.com/icanswim/qchem.git
+cd cosmosis
+git checkout pytorch18
+cd ..
 cd qchem
 mkdir data
 mkdir logs
 mkdir models
-conda create --name qchem -c conda-forge python=3.8 numpy pandas scipy
+conda create --name qchem-rdkit -c conda-forge python=3.8 numpy pandas scipy
 conda activate qchem
 conda install pytorch==1.8.0 torchvision==0.9.0 torchaudio==0.8.0 cudatoolkit=10.2 -c pytorch
 conda install -c conda-forge jupyterlab
@@ -26,7 +33,7 @@ conda install -c conda-forge matplotlib
 conda install -c conda-forge scikit-learn
 conda install -c conda-forge h5py
 conda install -c conda-forge git
-conda install pyg -c pyg -c conda-forge
+conda install pyg==2.0.1 -c pyg -c conda-forge
 conda install -c conda-forge rdkit
 jupyter lab
 
