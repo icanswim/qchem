@@ -16,9 +16,6 @@ from torch import as_tensor
 
 from torch_geometric.data import Dataset
 
-from rdkit import Chem
-from rdkit.Chem import AllChem
-
 from torch_geometric import datasets as pgds
 from torch_geometric.data import Data
 
@@ -55,10 +52,7 @@ class Molecule():
         self.atom_type
         self.n_atoms
         self.atomic_number
-    
-    def __init__(self):
-        super().__init__()
-        
+                
     def open_file(self, in_file):
         with open(in_file) as f:
             data = []
@@ -86,7 +80,7 @@ class Molecule():
     
     def embed_rdmol(self, rdmol, n_conformers):
         AllChem.EmbedMultipleConfs(rdmol, numConfs=n_conformers, maxAttempts=0, 
-                                   useRandomCoords=False, numThreads=0)
+                                                useRandomCoords=False, numThreads=0)
         
     def create_rdmol_data(self, rdmol):
         atom_type = []
@@ -189,8 +183,8 @@ class QM9Mol(Molecule):
                     'U0','U','H','G','Cv','qm9_n_atoms','qm9_block','qm9_atom_type',
                     'qm9_xyz','mulliken','in_file','smile','distance','coulomb']
     
-    def __init__(self, *args):
-        self.load_molecule(*args)
+    def __init__(self, in_file='', n_conformers=1, use_rdkit=False):
+        self.load_molecule(in_file, n_conformers, use_rdkit)
         
     def __repr__(self):
         return self.in_file[-20:-4]
@@ -229,30 +223,27 @@ class QM9Mol(Molecule):
         self.mulliken = np.concatenate(mulliken, axis=0)
         self.qm9_xyz = np.reshape(np.concatenate(xyz), (-1, 3))
         
-    def load_molecule(self, in_file='', db='qm9', n_conformers=1):
+    def load_molecule(self, in_file, n_conformers, use_rdkit):
         
         self.create_qm9_data(in_file)
         
-        if db == 'qm9':
-            block = self.qm9_block
-            xyz = self.qm9_xyz
-            atom_type = self.qm9_atom_type
-        else: 
+        if use_rdkit: 
             self.rdmol_from_smile(self.smile)
             self.create_rdmol_data(self.rdmol)
-            block = self.rdmol_block
-            atom_type = self.atom_type
             self.embed_rdmol(self.rdmol, n_conformers)
             if not self.rdmol.GetNumConformers() == 0:
                 self.xyz = self.xyz_from_rdmol(self.rdmol)
-                xyz = self.xyz
                 self.adjacency = self.adjacency_from_rdmol_block(self.rdmol_block)
             else:
-                xyz = self.qm9_xyz
-        
-        self.atom_type = atom_type
-        self.distance = self.distance_from_xyz(xyz)
-        self.coulomb = self.create_coulomb(self.distance, self.qm9_atomic_number)
+                self.xyz = self.qm9_xyz
+        else:   
+            self.xyz = self.qm9_xyz
+            self.atom_type = self.qm9_atom_type
+            self.n_atoms = self.qm9_n_atoms
+            self.atomic_number = self.qm9_atomic_number
+            
+        self.distance = self.distance_from_xyz(self.xyz)
+        self.coulomb = self.create_coulomb(self.distance, self.atomic_number)
 
 
 class QM9(CDataset):
@@ -317,7 +308,7 @@ class QM9(CDataset):
     filter_on = ('property', 'test', 'value')
     n = non random subset selection (for testing)
     use_pickle = False/'qm9_datadic.p' (if file exists loads, if not creates and saves)
-    db = 'qm9' or 'rdkit'
+    use_rdkit = True/False
     """
     LOW_CONVERGENCE = [21725,87037,59827,117523,128113,129053,129152, 
                        129158,130535,6620,59818]
@@ -365,10 +356,16 @@ class QM9(CDataset):
             return data
         
     def load_data(self, in_dir='./data/qm9/qm9.xyz/', n=133885, filter_on=None, 
-                  use_pickle='qm9_datadic.p', dtype='float32', db='qm9', n_conformers=1):
+                  use_pickle=False, dtype='float32', n_conformers=1, use_rdkit=False):
         
         self.embed_lookup = Molecule.embed_lookup
         
+        if use_rdkit:
+            from rdkit import Chem
+            from rdkit.Chem import AllChem
+            global Chem
+            global AllChem
+            
         if use_pickle and os.path.exists('./data/qm9/'+use_pickle):
             print('loading QM9 datadic from a pickled copy...')
             with open('./data/qm9/'+use_pickle, 'rb') as f:
@@ -379,9 +376,11 @@ class QM9(CDataset):
             scanned = 0
             self.no_conf = []
             self.inconsistant = []
+
+                
             for filename in sorted(os.listdir(in_dir)):
                 if filename.endswith('.xyz'): #create the molecule
-                    datadic[int(filename[-10:-4])] = QM9Mol(in_dir+filename, db, n_conformers)
+                    datadic[int(filename[-10:-4])] = QM9Mol(in_dir+filename, n_conformers, use_rdkit)
                     scanned += 1
 
                     if filter_on is not None: #filter the molecule
@@ -392,7 +391,7 @@ class QM9(CDataset):
                             del datadic[int(filename[-10:-4])]
                             break
                     
-                if db == 'rdkit': #check rdkit conformer matches qm9
+                if use_rdkit: #check rdkit conformer matches qm9
                     if not datadic[int(filename[-10:-4])].n_atoms == \
                                 datadic[int(filename[-10:-4])].qm9_n_atoms:
                         self.inconsistant.append(filename[-10:-4])
@@ -404,7 +403,7 @@ class QM9(CDataset):
                 if scanned % 1000 == 1:
                     print('molecules scanned: ', scanned)
 
-                    if db == 'rdkit':
+                    if use_rdkit:
                         print('molecules removed for no rdkit conformer: ', len(self.no_conf))
                         print('molecules removed for inconsistancy: ', len(self.inconsistant))
                     print('molecules created: ', len(datadic))
@@ -420,7 +419,7 @@ class QM9(CDataset):
                     self.unchar.append(mol)
                     
             print('total molecules scanned: ', scanned)
-            if db == 'rdkit':
+            if use_rdkit:
                 print('total molecules removed for inconsistancy: ', len(self.inconsistant))
                 print('total molecules removed for no rdkit conformer: ', len(self.no_conf))
             print('total uncharacterized molecules removed: ', len(self.unchar))
