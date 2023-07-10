@@ -323,7 +323,13 @@ class QM9(CDataset):
     def _get_features(self, mol, features):
         data = []
         for f in features:
-            out = getattr(mol, f)
+            _out = getattr(mol, f)
+            if f in ['distance','xyz','coulomb']:
+                d = random.choice(range(_out.shape[2]))
+                out = _out[:,:,d]
+            else:
+                out = _out
+                
             if f in self.pad_feats and self.pad:
                 out = np.pad(out, (0, (self.pad - out.shape[0])))
             if self.flatten:
