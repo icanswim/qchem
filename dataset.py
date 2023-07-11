@@ -154,30 +154,50 @@ class Molecule():
             return np.stack(xyz, axis=-1)
                 
     def distance_from_xyz(self, xyz):
-        distance = []
         m = np.zeros((xyz.shape[0], 3))
-        for c in range(xyz.shape[2]):
-            for i, atom in enumerate(xyz[:,:,c-1]):
+        if xyz.ndim == 2:
+            for i, atom in enumerate(xyz):
                 m[i,:] = atom
-            distance.append(sp.distance.squareform(sp.distance.pdist(m)).astype('float32'))
-        return np.stack(distance, axis=-1)
+            distance = sp.distance.squareform(sp.distance.pdist(m)).astype('float32')
+        elif xyz.ndim == 3:
+            distance = []
+            for c in range(xyz.shape[2]):
+                for i, atom in enumerate(xyz[:,:,c-1]):
+                    m[i,:] = atom
+                distance.append(sp.distance.squareform(sp.distance.pdist(m)).astype('float32'))
+            distance = np.stack(distance, axis=-1)
+        else:
+            print('xyz matrix must be either 2 or 3 dimensional...')
+        return distance
         
     def create_coulomb(self, distance, atomic_number, sigma=1):
         """creates coulomb matrix set sigma to False to turn off random sorting.  
         sigma = stddev of gaussian noise.
         https://papers.nips.cc/paper/4830-learning-invariant-representations-of-\
         molecules-for-atomization-energy-prediction"""
-        coulomb = []
-        for c in range(distance.shape[2]):              
+        if distance.ndim == 2:
             qmat = atomic_number[None, :]*atomic_number[:, None]
-            idmat = np.linalg.inv(distance[:,:,c-1])
+            idmat = np.linalg.inv(distance)
             np.fill_diagonal(idmat, 0)
-            _coulomb = qmat@idmat
-            np.fill_diagonal(_coulomb, 0.5 * atomic_number ** 2.4)
+            coulomb = qmat@idmat
+            np.fill_diagonal(coulomb, 0.5 * atomic_number ** 2.4)
             if sigma:  
-                _coulomb = self.sort_permute(_coulomb, sigma)
-            coulomb.append(_coulomb)
-        return np.stack(coulomb, axis=-1)
+                coulomb = self.sort_permute(coulomb, sigma)
+        elif distance.ndim == 3:
+            coulomb = []
+            for c in range(distance.shape[2]):              
+                qmat = atomic_number[None, :]*atomic_number[:, None]
+                idmat = np.linalg.inv(distance[:,:,c-1])
+                np.fill_diagonal(idmat, 0)
+                _coulomb = qmat@idmat
+                np.fill_diagonal(_coulomb, 0.5 * atomic_number ** 2.4)
+                if sigma:  
+                    _coulomb = self.sort_permute(_coulomb, sigma)
+                coulomb.append(_coulomb)
+            coulomb = np.stack(coulomb, axis=-1)
+        else:
+            print('distance matrix must be either 2 or 3 dimensional...')
+        return coulomb
     
     def sort_permute(self, matrix, sigma):
         norm = np.linalg.norm(matrix, axis=1)
