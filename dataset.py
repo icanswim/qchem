@@ -12,8 +12,6 @@ from scipy import spatial as sp
 from scipy.io import loadmat
 from scipy.sparse import coo_matrix
 
-from torch import as_tensor
-
 from torch_geometric.data import Dataset
 
 from torch_geometric import datasets as pgds
@@ -302,7 +300,7 @@ class ANI1x(CDataset, Molecule):
     It is indexed by a molecular formula and conformation index
     
     This dataset is a pytorch and cosmosis dataset:
-    Returns datadic['model_input']['X'] = [feature1,feature2,...,padding]
+    Returns datadic['model_input']['X'] = [feature1,feature2,...]
             datadic['criterion_input']['target'] = [target1,target2,...]
     
     Longest molecule is 63 atoms
@@ -312,7 +310,6 @@ class ANI1x(CDataset, Molecule):
         conformation logic
         input_dict['model_input']['X'] = ['property1','property2',...]
         input_dict['criterion_input']['target'] = ['property3',...]
-        padding
         data file location
     
     criterion = the property used to select the conformation
@@ -321,7 +318,6 @@ class ANI1x(CDataset, Molecule):
         'max' - choose the index with the highest value
         'random' - choose the index randomly 
         int - choose the index int
-    pad = int/False
     
     Na = number of atoms, Nc = number of conformations
     Atomic Positions ‘coordinates’ Å float32 (Nc, Na, 3)
@@ -375,20 +371,12 @@ class ANI1x(CDataset, Molecule):
         for input_key in self.input_dict:
             datadic[input_key] = {}
             for output_key in self.input_dict[input_key]:
-                out = self._get_features(self.ds[i], self.input_dict[input_key][output_key], ci)
-                if input_key == 'criterion_input':
-                    for target_transform in self.target_transform:
-                        out = target_transform(out)
-                else:
-                    for transform in self.transform:
-                        out = transform(out)
-                if self.as_tensor: out = as_tensor(out)
-            datadic[input_key][output_key] = out
-                   
+                out = self._get_features(self.ds[i], self.input_dict[input_key][output_key], ci)     
+                datadic[input_key][output_key] = out        
         return datadic   
         
     def _get_features(self, datadic, features, ci):
-        data = []
+        output = []
         for f in features:
             if f == 'atomic_numbers':
                 out = datadic[f]
@@ -400,16 +388,18 @@ class ANI1x(CDataset, Molecule):
                 out = self.create_coulomb(distance, atomic_n)
             else:
                 out = datadic[f][ci]
-                
+              
             if out.ndim == 0: #if value == nan
-                out = np.reshape(out, -1)    
-            if f in self.pad_feats and self.pad:
-                out = np.pad(out, (0, (self.pad - out.shape[0])))
-            if self.flatten:
-                out = np.reshape(out, -1)
-                
-            data.append(out)
-        return np.concatenate(data)
+                output.append(np.reshape(out, -1))
+            else:
+                if f in self.transforms:
+                    transforms = self.transforms[f] #get the list of transforms for this feature
+                    for T in transforms:
+                        out = T(out)
+                    output.append(out)
+                    
+        if len(output) == 1: return output[0]
+        else: return np.concatenate(output)
         
     def _get_conformation_index(self, datadic):
         """each molecular formula (mol) may have many different isomers
@@ -571,10 +561,20 @@ class QM7X(CDataset, Molecule):
     selector = list of regular expression strings (attr) for searching 
         and selecting idconf keys.
         idconf = ID configuration (e.g., 'Geom-m1-i1-c1-opt', 'Geom-m1-i1-c1-50')
-    flatten = True/False 
-    pad = None/int (pad length int in the Na (number of atoms) dimension)
     
     returns datadic[idmol][idconf][properties]
+    
+    #(Nc, Na), (Nc, Na, Na)
+    ['atNUM','distance','coulomb']
+    out = np.pad(out,((0,(self.pad - out.shape[0]))))
+    
+    #(Nc, Na, 3), (Nc, Na, 1)
+    ['atXYZ','totFOR','vdwFOR','pbe0FOR','hVDIP','atC6',
+     'hVOL','hRAT','hCHG','atC6','atPOL','vdwR','hDIP']:
+    out = np.pad(out,((0,(self.pad - out.shape[0])),(0,0)))
+    
+    #(Nc, 9), (Nc, 3), (Nc)
+    no padding
     """
     set_ids = ['1000','2000','3000','4000','5000','6000','7000','8000']
     
@@ -587,60 +587,24 @@ class QM7X(CDataset, Molecule):
         
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-         
+        
     def __getitem__(self, i):         
-        """this func feeds the model's forward().  the structure of the input_dict 
-        determines the structure of the output datadict
-        keywords = 'criterion_input','embed'
+        """this func feeds the model's forward().  
+        the structure of the input_dict determines the structure of the output datadict
+        keywords = 'criterion_input','embed','model_input'
         """
         #if multiple conformations one is randomly selected
         conformations = list(self.ds[i].keys())
         idconf = random.choice(conformations)
         datadic = {}
+
         for input_key in self.input_dict:
             datadic[input_key] = {}
             for output_key in self.input_dict[input_key]:
-                if output_key == 'embed':
-                    out = self._get_embed_idx(self.ds[i][idconf], 
-                                              self.input_dict[input_key][output_key], 
-                                              self.embed_lookup)
-                else:
-                    out = self._get_features(self.ds[i][idconf], 
-                                             self.input_dict[input_key][output_key])
-                    
-                    if input_key == 'criterion_input':
-                        for target_transform in self.target_transform:
-                            out = target_transform(out)
-                    else:
-                        for transform in self.transform:
-                            out = transform(out)
-                        
-                    if self.as_tensor: out = as_tensor(out)
+                out = self._get_features(self.ds[i][idconf], self.input_dict[input_key][output_key])
                 datadic[input_key][output_key] = out
-                
         return datadic
     
-    def _get_features(self, datadic, features):
-        data = []
-        for f in features:
-            out = datadic[f]
-
-            if self.pad is not None:
-                #(Nc, Na), (Nc, Na, Na)
-                if f in ['atNUM','distance','coulomb']:
-                    out = np.pad(out,((0,(self.pad - out.shape[0]))))
-                #(Nc, Na, 3), (Nc, Na, 1)
-                elif f in ['atXYZ','totFOR','vdwFOR','pbe0FOR','hVDIP','atC6',
-                           'hVOL','hRAT','hCHG','atC6','atPOL','vdwR','hDIP']:
-                    out = np.pad(out,((0,(self.pad - out.shape[0])),(0,0)))
-                #(Nc, 9), (Nc, 3), (Nc) no padding
-            if self.flatten:
-                out = np.reshape(out, -1)
-                
-            data.append(out)
-            
-        return np.concatenate(data)
-        
     def _load_features(self, mol, dtype='float32'):
         datadic = {}
         for p in QM7X.properties:
@@ -736,10 +700,7 @@ class QM7(CDataset):
                         xyz = padded #no padding (longest molecule)
                     out = sp.distance.squareform(sp.distance.pdist(xyz))
                     out = np.pad(out, ((0, 23-out.shape[0]), (0, 23-out.shape[1])))
-                    
-                if self.flatten: out = np.reshape(out, -1)
-                datadic[i].update({f: out})
-                    
+                datadic[i].update({f: out})        
         return datadic
         
 class QM7b(CDataset):
@@ -798,12 +759,6 @@ class PGDS(CDataset):
     def __init__(self, **kwargs):
         print('creating pytorch geometric {} dataset...'.format(kwargs['dataset']))
         super().__init__(**kwargs)
-        
-    def __getitem__(self, i):
-        if self.input_dict == None:
-            return self.ds.__getitem__(i)
-        else:
-            return super().__getitem__(i)
         
     def load_data(self, dataset, pg_params):
         ds = getattr(pgds, dataset)(**pg_params)

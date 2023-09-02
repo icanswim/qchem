@@ -27,11 +27,9 @@ class GraphNet(CModel):
         for d in range(depth):
             self.layers.append(GCNConv(hidden, hidden))
         self.ffu = CModel.ff_unit(self, hidden, out_channels, activation=None, 
-                                                      batch_norm=None, dropout=.2)
+                                                      batch_norm=False, dropout=.2)
                                
     def forward(self, data):
-        if type(data) == dict:
-            x, edge_index = 
         x, edge_index = data.x, data.edge_index
         for l in self.layers:
             x = l(x, edge_index)
@@ -47,21 +45,19 @@ class GlobalAttentionNet(CModel):
         self.layers.append(SAGEConv(in_channels, hidden))
         for d in range(depth):
             self.layers.append(SAGEConv(hidden, hidden))
-        self.ffu1 = CModel.ff_unit(self, hidden, 1, 
-                                   activation=None, dropout=None, batch_norm=None)
-        self.attention = AttentionalAggregation()
-        self.ffu2 = CModel.ff_unit(self, hidden, hidden, 
-                                   activation=nn.ReLU, dropout=.2, batch_norm=None)
-        self.ffu3 = CModel.ff_unit(self, hidden, out_channels, 
-                                   activation=None, dropout=None, batch_norm=None)
+        self.attention = AttentionalAggregation(CModel.ff_unit(self, hidden, 1, 
+                                   activation=None, dropout=None, batch_norm=False))
+        self.ffu1 = CModel.ff_unit(self, hidden, hidden, 
+                                   activation=nn.ReLU, dropout=.2, batch_norm=False)
+        self.ffu2 = CModel.ff_unit(self, hidden, out_channels, 
+                                   activation=None, dropout=None, batch_norm=False)
                           
     def forward(self, data):
         x, edge_index = data.x, data.edge_index
         for l in self.layers:
             x = l(x, edge_index)
             x = F.relu(x)
-        x = self.ffu1(x)
         x = self.attention(x, data.batch)
+        x = self.ffu1(x)
         x = self.ffu2(x)
-        x = self.ffu3(x)
         return F.log_softmax(x, dim=-1)
