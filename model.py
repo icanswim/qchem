@@ -6,58 +6,101 @@ from cosmosis.model import CModel, FFNet
 from torch import nn
 import torch.nn.functional as F
 
+from torch_geometric.nn import models as pygmodels
 from torch_geometric.nn import GCNConv, Linear, global_mean_pool
 from torch_geometric.nn import AttentionalAggregation, SAGEConv, GATConv
 
 
-def pyg_model(model_params):
-    """A PyTorch Geometric model launcher"""
-    from torch_geometric.nn import models as pygmodels
+class PygModel(nn.Module):
+    """
+    A PyG model wrapper
     
-    launcher = getattr(pygmodels, model_params['model_name'])
-    model = launcher(**model_params['pyg_params'])
-    print('pytorch geometric model {} loaded...'.format(model_params['model_name']))
-    return model
-
+    model_name = 'ModelName'
+    ffnet = True/False
+    in_channels = int (ffnet)
+    hidden = int (ffnet)
+    out_channels = int (ffnet)
+    depth = int (num of conv layers)
+    pool = 'None'/'global_mean'
+    softmax = True/False
+    pyg_params = {'in_channels': int,
+                  'hidden_channels': int,
+                  'num_layers': int,
+                  'out_channels': int,
+                  'dropout': .int,
+                  'norm': None}
+    """
+    
+    def __init__(self, model_params):
+        super().__init__()
+        Pool = {'global_mean': global_mean_pool, 'None': None}
+        launcher = getattr(pygmodels, model_params['model_name'])
+        self.model = launcher(**model_params['pyg_params'])
+        
+        self.softmax = model_params['softmax']
+        self.pool = Pool[model_params['pool']]
+        self.ffnet = model_params['ffnet']
+        
+        if self.ffnet:
+            self.ffn = FFNet({'in_channels': model_params['in_channels'], 
+                              'hidden': model_params['hidden'],
+                              'out_channels': model_params['out_channels']})
+        
+        print('pytorch geometric model {} loaded...'.format(model_params['model_name']))
+        
+    def forward(self, data):
+        x, edge_index = data.x, data.edge_index
+        x = self.model(x, edge_index)
+        if self.pool is not None:
+            x = self.pool(x, data.batch)
+        if self.ffnet: 
+            x = self.ffn(x)    
+        if self.softmax: 
+            return F.log_softmax(x, dim=1)
+        else:
+            return x
+        
 class GraphNet(CModel):
+    """
+    builds custom PyG conv nets
     
-    def build(self, in_channels=0, hidden=0, out_channels=0, depth=0):
-        self.layers = []
-        self.layers.append(GCNConv(in_channels, hidden))
+    
+    """
+
+    def build(self, in_channels=0, hidden=0, out_channels=0, depth=0, 
+              conv='SAGEConv', pool='global_mean', dropout=.1, 
+              softmax=False, activation=F.relu):
+        
+        Conv = {'GCNConv': GCNConv, 'SAGEConv': SAGEConv, 'GATConv': GATConv}
+        Pool = {'global_mean': global_mean_pool, 'None': None}
+        
+        self.dropout = dropout
+        self.activation = activation
+        layers = []
+        layers.append(Conv[conv](in_channels, hidden))
         for d in range(depth):
-            self.layers.append(GCNConv(hidden, hidden))
-        self.ffu = CModel.ff_unit(self, hidden, out_channels, activation=None, 
-                                                      batch_norm=False, dropout=.2)
+            layers.append(Conv[conv](hidden, hidden, normalize=True))
+        self.layers = layers
+        self.pool = Pool[pool]
+        self.ffnet = FFNet({'in_channels':hidden, 'hidden':2*hidden, 'out_channels':out_channels})
+        self.softmax = softmax
+        print('GraphNet {} loaded...'.format(conv))
                                
     def forward(self, data):
         x, edge_index = data.x, data.edge_index
-        for l in self.layers:
+        
+        for i, l in enumerate(self.layers):
+            if self.dropout is not None:
+                x = F.dropout(x, p=self.dropout*i)
             x = l(x, edge_index)
-            x = F.relu(x)
-        x = global_mean_pool(x, data.batch)
-        x = self.ffu(x)
-        return x
+            if self.activation is not None:
+                x = self.activation(x)
+        if self.pool is not None:
+            x = self.pool(x, data.batch)
+        x = self.ffnet(x)
+        if self.softmax: 
+            return F.log_softmax(x, dim=1)      
+        else: 
+            return x
     
-class GlobalAttentionNet(CModel):
-    
-    def build(self, in_channels=0, hidden=0, out_channels=0, depth=0):
-        self.layers = []
-        self.layers.append(SAGEConv(in_channels, hidden))
-        for d in range(depth):
-            self.layers.append(SAGEConv(hidden, hidden))
-        self.attention = AttentionalAggregation(CModel.ff_unit(self, hidden, 1, 
-                                   activation=None, dropout=None, batch_norm=False))
-        self.ffu1 = CModel.ff_unit(self, hidden, hidden, 
-                                   activation=nn.ReLU, dropout=.2, batch_norm=False)
-        self.ffu2 = CModel.ff_unit(self, hidden, out_channels, 
-                                   activation=None, dropout=None, batch_norm=False)
-                          
-    def forward(self, data):
-        x, edge_index = data.x, data.edge_index
-        for l in self.layers:
-            x = l(x, edge_index)
-            x = F.relu(x)
-        x = self.attention(x, data.batch)
-        x = self.ffu1(x)
-        x = self.ffu2(x)
-        return F.log_softmax(x, dim=-1)
+
