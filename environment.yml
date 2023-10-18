@@ -28,8 +28,8 @@ dependencies:
   - brotlipy=0.7.0=py310h7f8727e_1002
   - bzip2=1.0.8=h7b6447c_0
   - c-ares=1.19.0=h5eee18b_0
-  - ca-certificates=2023.05.30=h06a4308_0
-  - certifi=2023.5.7=py310h06a4308_0
+  - ca-certificates=2023.08.22=h06a4308_0
+  - certifi=2023.7.22=py310h06a4308_0
   - cffi=1.15.1=py310h5eee18b_3
   - charset-normalizer=2.0.4=pyhd3eb1b0_0
   - contourpy=1.0.5=py310hdb19cb5_0
@@ -171,7 +171,7 @@ dependencies:
   - numpy=1.24.3=py310h5f9d8c6_1
   - numpy-base=1.24.3=py310hb5e798b_1
   - openh264=2.1.1=h4ff587b_0
-  - openssl=3.0.9=h7f8727e_0
+  - openssl=3.0.11=h7f8727e_2
   - packaging=23.1=pyhd8ed1ab_0
   - pandas=1.5.3=py310h1128e8f_0
   - pandocfilters=1.5.0=pyhd8ed1ab_0
@@ -208,6 +208,7 @@ dependencies:
   - pytorch=2.0.1=py3.10_cuda11.7_cudnn8.5.0_0
   - pytorch-cuda=11.7=h778d358_5
   - pytorch-mutex=1.0=cuda
+  - pytorch-scatter=2.1.2=py310_torch_2.0.0_cu117
   - pytz=2023.3=pyhd8ed1ab_0
   - pyyaml=6.0=py310h5764c6d_4
   - pyzmq=25.1.0=py310h6a678d5_0
