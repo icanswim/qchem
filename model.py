@@ -1,8 +1,6 @@
 import sys # required for relative imports in jupyter lab
 sys.path.insert(0, '../')
 
-import inspect
-
 from cosmosis.model import CModel, FFNet
 
 from torch import nn
@@ -40,11 +38,11 @@ class PygModel(nn.Module):
         
         pool = model_params['pool']
         if pool is not None:
-            #self.pool = getatt(aggr, pool)()
-            self.pool = global_max_pool
+            self.pool = getattr(aggr, pool)()
         else:
             self.pool = None
         
+        self.ffnet = model_params['ffnet']
         if self.ffnet:
             self.ffn = FFNet({'in_channels': model_params['in_channels'], 
                               'hidden': model_params['hidden'],
@@ -136,17 +134,17 @@ class GraphNet(CModel):
         
         for i, l in enumerate(self.layers):
             
-            if self.dropout is not None:
-                x = F.dropout(x, p=self.dropout*i)
-                
             if self.convolution in ['NetConv']:
                 x = l(x, edge_index=data.edge_index, edge_attr=data.edge_attr)
             else:
                 x = l(x, edge_index=data.edge_index)
-
+            
             if self.activation is not None:
                 x = F.relu(x)
-     
+                
+            if self.dropout is not None:
+                x = F.dropout(x, p=self.dropout*i)
+                
         if self.pool is not None:
             x = self.pool(x, data.batch)
             
