@@ -3,14 +3,13 @@ sys.path.insert(0, '../')
 
 from cosmosis.model import CModel, FFNet
 
-from torch import nn, log, mean, sum, exp, randn_like
+from torch import nn, log, mean, sum, exp, randn_like, matmul, Tensor
 import torch.nn.functional as F
-
 
 from torch_geometric.nn import models as pygmodels
 from torch_geometric.nn import aggr, conv, NNConv, VGAE, GCNConv
 
-from torch_geometric.utils import negative_sampling
+from torch_geometric.utils import batched_negative_sampling, negative_sampling
 
 
 class PygModel(nn.Module):
@@ -159,16 +158,18 @@ class GraphNet(CModel):
         return x
     
 
-    
 class GraphNetVariationalEncoder(CModel):
     
     def build(self, in_channels, hidden, out_channels, depth):
+        
         self.gnet = GraphNet({'in_channels':in_channels, 'hidden':2*hidden, 
-                              'out_channels':hidden, 'depth': depth})
+                              'out_channels':hidden, 'depth':depth, 'pool':None})
         self.mu = FFNet({'in_channels':hidden, 'hidden':2*hidden, 
                          'out_channels':out_channels})
         self.logstd = FFNet({'in_channels':hidden, 'hidden':2*hidden, 
                              'out_channels':out_channels})
+        
+        print('GraphNetVariationalEncoder loaded...')
 
     def forward(self, data):
         z = self.gnet(data)
@@ -181,41 +182,31 @@ class GraphNetVariationalEncoder(CModel):
             return (z, mu, logstd)
         else:
             return (z, mu, logstd)
-    
-
-class QGAE(CModel):
-    """Quantum Graph Auto Encoder"""
-
-    def build(self, in_channels, hidden, out_channels, depth):
-        self.encoder = GraphNetVariationalEncoder(in_channels, hidden, out_channels, depth)
-
-
-    def forward(self, data):        
         
-        if hasattr(self, 'training'):
-            self.encoder.training = self.training
-        (z, mu, logstd) = self.encoder(data)
-
-    
-class CriterionQGAE():
-    """criterion for auto encoders"""
+        
+class AELoss():
+    """criterion for GraphNet Auto Encoders"""
     
     def __init__(self, Decoder=pygmodels.InnerProductDecoder, decoder_params={}):
         self.decoder = Decoder(**decoder_params)
-
-    def forward(self, (z, mu, std), pos_edge_index):
         
+    def __call__(self, z, mu, logstd, data):
+        return self.forward(z, mu, logstd, data)
+
+    def forward(self, z, mu, logstd, data):
+        
+        pos_edge_index = data.edge_index
+        neg_edge_index = batched_negative_sampling(pos_edge_index, data.batch, 
+                                                       method='dense', force_undirected=True)
+
         pos_loss = -log(self.decoder(z, pos_edge_index, sigmoid=True) + 1e-15).mean()
-
-        neg_edge_index = negative_sampling(pos_edge_index, z.size(0))
-            
         neg_loss = -log(1 - self.decoder(z, neg_edge_index, sigmoid=True) + 1e-15).mean()
-
         recon_loss = pos_loss + neg_loss
         
         def kl_loss():
             return -0.5 * mean(sum(1 + 2 * logstd - mu**2 - logstd.exp()**2, dim=1))
         
-        loss = recon_loss + (1 / data.num_nodes) * k1_loss()
+        loss = recon_loss + (1 / data.num_nodes) * kl_loss()
+        
         return loss
     
