@@ -15,7 +15,7 @@ from torch.nn.functional import softmax
 
 from sklearn import metrics
 
-from model import AELoss
+from model import GVAELoss
 
 
 class Metrics():
@@ -51,11 +51,14 @@ class Metrics():
 
         def softmax(x): return np.exp(x)/sum(np.exp(x))
     
-        y = np.reshape(np.vstack(np.asarray(self.sk_y, 'float64')), -1)
-        y_pred = np.vstack(np.asarray(self.sk_pred, 'float64'))
+        y = np.concatenate(self.sk_y)
+        y_pred = np.concatenate(self.sk_pred)
+        
+        #y = np.reshape(np.vstack(np.asarray(self.sk_y, 'float64')), (-1,1))
+        #y_pred = np.vstack(np.asarray(self.sk_pred, 'float64'))
 
-        if self.sk_metric_name == 'roc_auc_score':
-            y_pred = np.apply_along_axis(softmax, 1, y_pred)
+        #if self.sk_metric_name == 'roc_auc_score':
+        #    y_pred = np.apply_along_axis(softmax, 1, y_pred)
             
         if self.sk_metric_name == 'accuracy_score':
             y_pred = np.argmax(y_pred, axis=1)
@@ -279,7 +282,7 @@ class Learn():
         if Criterion is not None:
             self.criterion = Criterion(**crit_params)
             if self.gpu: 
-                if isinstance(self.criterion, AELoss):
+                if isinstance(self.criterion, GVAELoss):
                     self.criterion.decoder.to('cuda:0')
                 else: 
                     self.criterion.to('cuda:0')
@@ -380,8 +383,8 @@ class Learn():
                 else: 
                     y = getattr(data, self.target)
                 self.opt.zero_grad()
-                if isinstance(self.criterion, AELoss):
-                    b_loss = self.criterion(*y_pred, data)
+                if isinstance(self.criterion, GVAELoss):
+                    b_loss, y_pred, y = self.criterion(*y_pred, data)
                 else:
                     b_loss = self.criterion(y_pred, y)
                 e_loss += b_loss.item()
