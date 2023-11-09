@@ -49,17 +49,9 @@ class Metrics():
 
     def sk_metric(self, flag):
 
-        def softmax(x): return np.exp(x)/sum(np.exp(x))
-    
         y = np.concatenate(self.sk_y)
         y_pred = np.concatenate(self.sk_pred)
         
-        #y = np.reshape(np.vstack(np.asarray(self.sk_y, 'float64')), (-1,1))
-        #y_pred = np.vstack(np.asarray(self.sk_pred, 'float64'))
-
-        #if self.sk_metric_name == 'roc_auc_score':
-        #    y_pred = np.apply_along_axis(softmax, 1, y_pred)
-            
         if self.sk_metric_name == 'accuracy_score':
             y_pred = np.argmax(y_pred, axis=1)
 
@@ -354,13 +346,13 @@ class Learn():
        
         for data in dataloader:
             i += self.bs
-            if self.gpu: # overwrite the datadic with a new copy on the gpu
-                if type(data) == dict: #data can be passed as a dict or data class object
+            if self.gpu: 
+                if type(data) == dict: #if datadict overwrite with a new copy on the gpu
                     _data = {'model_input': {},
                              'criterion_input': {}}
                     for d in data:
                         for j in data[d]:
-                            # if input is a list of lists of embedding indices
+                            #if input is a list of lists of embedding indices
                             if type(data[d][j]) == list: 
                                 datalists = []
                                 for k in data[d][j]: 

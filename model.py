@@ -158,10 +158,11 @@ class GraphNet(CModel):
 class GraphNetVariationalEncoder(CModel):
     
     def build(self, in_channels, hidden, out_channels, depth, 
-                  convolution='GCNConv',pool=None, softmax=None):
+                  convolution='GCNConv',pool=None, softmax=None, **kwargs):
         
         self.gnet = GraphNet({'in_channels':in_channels, 'hidden':hidden, 'out_channels':hidden, 
-                              'convolution':convolution, 'depth':depth, 'pool':pool, 'softmax':softmax})
+                              'convolution':convolution, 'depth':depth, 'pool':pool, 'softmax':softmax,
+                              **kwargs})
         self.mu = FFNet({'in_channels':hidden, 'hidden':hidden, 
                          'out_channels':out_channels, 'softmax':softmax})
         self.logstd = FFNet({'in_channels':hidden, 'hidden':hidden, 
