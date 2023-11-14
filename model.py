@@ -3,8 +3,9 @@ sys.path.insert(0, '../')
 
 from cosmosis.model import CModel, FFNet
 
-from torch import nn, log, mean, sum, exp, randn_like, matmul, Tensor, cat
+from torch import nn, log, mean, sum, exp, randn_like, matmul, Tensor, cat, sigmoid
 import torch.nn.functional as F
+from torch.optim import Adam
 
 from torch_geometric.nn import models as pygmodels
 from torch_geometric.nn import aggr, conv, NNConv, VGAE, GCNConv
@@ -183,38 +184,85 @@ class GraphNetVariationalEncoder(CModel):
             return (z, mu, logstd)
         
         
-class GVAELoss():
+class EncoderLoss():
     """criterion for GraphNet Variational Auto Encoders"""
     
-    def __init__(self, Decoder=pygmodels.InnerProductDecoder, decoder_params={}):
+    def __init__(self, Decoder=pygmodels.InnerProductDecoder, 
+                     decoder_params={}, adversarial=False, disc_params={}):
+    
         self.decoder = Decoder(**decoder_params)
+        self.adversarial = adversarial
+        if self.adversarial:
+            self.discriminator = FFNet(disc_params)
+            self.disc_optimizer = Adam(self.discriminator.parameters(), lr=.05)
+            
+    def __call__(self, z, mu, logstd, data, flag):
+        return self.forward(z, mu, logstd, data, flag)
         
-    def __call__(self, z, mu, logstd, data):
-        return self.forward(z, mu, logstd, data)
+    def reg_loss(self, z):
 
-    def forward(self, z, mu, logstd, data):
-        
+        reg = sigmoid(self.discriminator(z))
+        reg_loss = -log(reg + 1e-15).mean()
+        return reg_loss
+
+    def discriminator_loss(self, z):
+
+        real = sigmoid(self.discriminator(randn_like(z)))
+        fake = sigmoid(self.discriminator(z.detach()))
+        real_loss = -log(real + 1e-15).mean()
+        fake_loss = -log(1 - fake + 1e-15).mean()
+        return real_loss + fake_loss
+
+    def recon_loss(self, z, mu, logstd, data):
+                   
         pos_edge_index = data.edge_index
         neg_edge_index = batched_negative_sampling(pos_edge_index, data.batch, 
                                                        method='dense', force_undirected=True)
-        
-        pos_y = z.new_ones(pos_edge_index.size(1))
-        neg_y = z.new_zeros(neg_edge_index.size(1))
-        y = cat([pos_y, neg_y], dim=0)
-        
         pos_pred = self.decoder(z, pos_edge_index, sigmoid=True)
         neg_pred = self.decoder(z, neg_edge_index, sigmoid=True)
-        
+        y_pred = cat([pos_pred, neg_pred], dim=0)
+
         pos_loss = -log(pos_pred + 1e-15).mean()
         neg_loss = -log(1 - neg_pred + 1e-15).mean()
         recon_loss = pos_loss + neg_loss
-        
-        y_pred = cat([pos_pred, neg_pred], dim=0)
-        
+                   
         def kl_loss():
             return -0.5 * mean(sum(1 + 2 * logstd - mu**2 - logstd.exp()**2, dim=1))
-        
+
         loss = recon_loss + (1 / data.num_nodes) * kl_loss()
-        
+
+        pos_y = z.new_ones(pos_edge_index.size(1))
+        neg_y = z.new_zeros(neg_edge_index.size(1))
+        y = cat([pos_y, neg_y], dim=0)
+
         return loss, y_pred, y
-    
+                   
+    def forward(self, z, mu, logstd, data, flag):
+        
+        if self.adversarial:
+            if flag == 'train':
+                for _ in range(3):
+                    self.disc_optimizer.zero_grad()
+                    disc_loss = self.discriminator_loss(z)
+                    disc_loss.backward()
+                    self.disc_optimizer.step()
+            reg_loss = self.reg_loss(z)
+            
+        recon_loss, y_pred, y = self.recon_loss(z, mu, logstd, data)
+        
+        if self.adversarial:
+            loss = recon_loss + reg_loss
+        else: 
+            loss = recon_loss
+            
+        return loss, y_pred, y
+        
+            
+        
+            
+            
+            
+        
+        
+
+
