@@ -72,6 +72,7 @@ class PygModel(nn.Module):
         
         
 class NetConv(nn.Module):
+    """NNConv wrapper which includes the network for edge attributes"""
     
     def __init__(self, in_channels, out_channels, edge_features=0):
         super().__init__()
@@ -185,10 +186,18 @@ class GraphNetVariationalEncoder(CModel):
         
         
 class EncoderLoss():
-    """criterion for GraphNet Variational Auto Encoders"""
+    """criterion for Adversarial Variational Auto Encoders
+    https://arxiv.org/abs/1802.04407
     
-    def __init__(self, Decoder=pygmodels.InnerProductDecoder, 
-                     decoder_params={}, adversarial=False, disc_params={}):
+    Decoder = takes embeddings (z) and adjacency matrix (edge_index) returns 
+        probabilities that an edge exists
+        
+    adversarial = True/False toggles adversarial regularizing MLP enforcing 
+        standard normal distribution prior
+    """
+    
+    def __init__(self, Decoder=pygmodels.InnerProductDecoder, decoder_params={},
+                       adversarial=False, disc_params={}):
     
         self.decoder = Decoder(**decoder_params)
         self.adversarial = adversarial
@@ -206,7 +215,10 @@ class EncoderLoss():
         return reg_loss
 
     def discriminator_loss(self, z):
-
+        """Returns the penalty for encodings z not resembling some prior (normal) distribution.
+        The cross-entropy cost of the binary classifier tests if the sample is drawn from the 
+        embeddings z or from some prior (normal in this case), thereby enforcing the embeddings to
+        resemble a prior."""
         real = sigmoid(self.discriminator(randn_like(z)))
         fake = sigmoid(self.discriminator(z.detach()))
         real_loss = -log(real + 1e-15).mean()
