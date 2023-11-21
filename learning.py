@@ -15,19 +15,18 @@ from torch.nn.functional import softmax
 
 from sklearn import metrics
 
-from model import GVAELoss
+from model import EncoderLoss
 
 
 class Metrics():
 
     def __init__(self, report_interval=10, sk_metric_name=None, 
-                     log_plot=False, min_lr=.00125, sk_params={}):
+                     log_plot=False, sk_params={}):
         
         self.start = datetime.now()
         self.report_time = self.start
         self.report_interval = report_interval
         self.log_plot = log_plot
-        self.min_lr = min_lr
         
         self.epoch, self.e_loss, self.predictions = 0, [], []
         self.train_loss, self.val_loss, self.lr_log = [], [], []
@@ -274,8 +273,10 @@ class Learn():
         if Criterion is not None:
             self.criterion = Criterion(**crit_params)
             if self.gpu: 
-                if isinstance(self.criterion, GVAELoss):
+                if isinstance(self.criterion, EncoderLoss):
                     self.criterion.decoder.to('cuda:0')
+                    if self.criterion.adversarial:
+                        self.criterion.discriminator.to('cuda:0')
                 else: 
                     self.criterion.to('cuda:0')
             self.metrics.log('criterion: {}\n{}'.format(self.criterion, crit_params))
@@ -290,10 +291,6 @@ class Learn():
                 self.run('train')
                 with no_grad():
                     self.run('val')
-                    if e > 1 and  self.metrics.lr_log[-1] < self.metrics.min_lr:
-                        self.metrics.status_report(now=True)
-                        print('early stopping!  learning rate is below the set minimum...')
-                        break
                 
             with no_grad():
                 self.run('test')
@@ -375,8 +372,8 @@ class Learn():
                 else: 
                     y = getattr(data, self.target)
                 self.opt.zero_grad()
-                if isinstance(self.criterion, GVAELoss):
-                    b_loss, y_pred, y = self.criterion(*y_pred, data)
+                if isinstance(self.criterion, EncoderLoss):
+                    b_loss, y_pred, y = self.criterion(*y_pred, data, flag)
                 else:
                     b_loss = self.criterion(y_pred, y)
                 e_loss += b_loss.item()
