@@ -6,7 +6,7 @@ From Machine Learning for Molecular Simulation
 
 ## Datasets, models and learners implemented in pytorch 
 * light weight, modular, extendable
-* pytorch=2.0.1, pyg=2.3.0, cuda=11.7, python=3.10
+* pytorch=2.1.1, pyg=2.4, cuda=12.1, python=3.11.5
 * uses the icanswim/cosmosis-main datascience repo for rapid prototyping
 * see setup_notes.txt for implementation details
 * see experiment.ipynb for examples

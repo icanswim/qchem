@@ -47,9 +47,14 @@ class Metrics():
         print('inference {} complete and saved to csv...'.format(self.start))
 
     def sk_metric(self, flag):
-
+        """TODO multiple sk metrics"""
+        def softmax(x): return np.exp(x)/sum(np.exp(x))
+        
         y = np.concatenate(self.sk_y)
         y_pred = np.concatenate(self.sk_pred)
+
+        if self.sk_metric_name == 'roc_auc_score':
+            y_pred = np.apply_along_axis(softmax, 1, y_pred)
         
         if self.sk_metric_name == 'accuracy_score':
             y_pred = np.argmax(y_pred, axis=1)
