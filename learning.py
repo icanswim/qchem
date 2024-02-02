@@ -49,14 +49,19 @@ class Metrics():
     def sk_metric(self, flag):
         """TODO multiple sk metrics"""
         def softmax(x): return np.exp(x)/sum(np.exp(x))
+
+        def softmax_overflow(x):
+            x_max = x.max()
+            normalized = np.exp(x - x_max)
+            return normalized / normalized.sum()
         
         y = np.concatenate(self.sk_y)
         y_pred = np.concatenate(self.sk_pred)
 
-        if self.sk_metric_name == 'roc_auc_score':
+        if self.sk_metric_name == 'roc_auc_score' and y_pred.ndim == 2:
             y_pred = np.apply_along_axis(softmax, 1, y_pred)
         
-        if self.sk_metric_name == 'accuracy_score':
+        if self.sk_metric_name == 'accuracy_score' and y_pred.ndim == 2:
             y_pred = np.argmax(y_pred, axis=1)
 
         score = self.skm(y, y_pred, **self.sk_params)
