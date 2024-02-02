@@ -11,7 +11,7 @@ conda env create -f environment.yml
 conda activate qchem
 jupyter lab
 
-##manual creation of conda enviornment and folders
+##manual creation of conda environment and folders
 git clone https://github.com/icanswim/cosmosis.git
 git clone https://github.com/icanswim/qchem.git
 cd qchem
