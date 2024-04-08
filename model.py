@@ -209,7 +209,6 @@ class EncoderLoss():
         return self.forward(z, mu, logstd, data, flag)
         
     def reg_loss(self, z):
-
         reg = sigmoid(self.discriminator(z))
         reg_loss = -log(reg + 1e-15).mean()
         return reg_loss

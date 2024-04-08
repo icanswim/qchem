@@ -17,6 +17,9 @@ from torch_geometric.data import Dataset
 from torch_geometric import datasets as pgds
 from torch_geometric.data import Data
 
+from rdkit import Chem
+from rdkit.Chem import AllChem
+
 
 class Molecule():
     """an abstract class with utilities for creating molecule instances
@@ -52,30 +55,119 @@ class Molecule():
             for line in f.readlines():
                 data.append(line)
             return data
-           
+
+    def rdmol_from_smile(self, smile):
+        self.rdmol = Chem.AddHs(Chem.MolFromSmiles(smile))
+
+    def adjacency_from_rdmol_block(self, rdmol_block):
+        """use the V2000 chemical table's (rdmol MolBlock) adjacency list to create a 
+        nxn symetric matrix with 0, 1, 2 or 3 for bond type where n is the indexed 
+        atom"""
+        adjacency = np.zeros((self.n_atoms, self.n_atoms), dtype='int64')
+        block = rdmol_block.split('\n')
+        for b in block[:-2]:
+            line = ''.join(b.split())
+            if len(line) == 4:
+                # shift -1 to index from zero
+                adjacency[(int(line[0])-1),(int(line[1])-1)] = int(line[2]) 
+                # create bi-directional connection
+                adjacency[(int(line[1])-1),(int(line[0])-1)] = int(line[2]) 
+        return adjacency
+    
+    def embed_rdmol(self, rdmol, n_conformers):
+        AllChem.EmbedMultipleConfs(rdmol, numConfs=n_conformers, maxAttempts=0, useRandomCoords=False, numThreads=0)
+
+    def create_rdmol_data(self, rdmol):
+        atom_type = []
+        atomic_number = []
+        aromatic = []
+        chirality = []
+        degree = []
+        charge = []
+        n_hs = []
+        n_rads = []
+        hybridization = []
+
+        for atom in rdmol.GetAtoms():
+            atom_type.append(atom.GetSymbol())
+            atomic_number.append(atom.GetAtomicNum()) 
+            aromatic.append(1 if atom.GetIsAromatic() else 0)
+            chirality.append(str(atom.GetChiralTag()))
+            degree.append(atom.GetTotalDegree())
+            charge.append(atom.GetFormalCharge())
+            n_hs.append(atom.GetTotalNumHs())
+            n_rads.append(atom.GetNumRadicalElectrons())
+            hybridization.append(str(atom.GetHybridization()))
+
+        self.atom_type = np.asarray(atom_type)
+        self.atomic_number = np.asarray(atomic_number, dtype=np.float32)
+        self.aromatic = np.asarray(aromatic, dtype=np.float32)
+        self.chirality = np.asarray(chirality)
+        self.degree = np.asarray(degree, dtype=np.float32)
+        self.charge = np.asarray(charge, dtype=np.float32)
+        self.n_hs = np.asarray(n_hs, dtype=np.float32)
+        self.n_rads = np.asarray(n_rads, dtype=np.float32)
+        self.hybridization = np.asarray(hybridization)
+
+        for bond in rdmol.GetBonds():
+            edge_indices, edge_attrs = [], []
+            for bond in rdmol.GetBonds():
+                i = bond.GetBeginAtomIdx()
+                j = bond.GetEndAtomIdx()
+
+                e = []
+                e.append(Molecule.embed_lookup['bond_type'][str(bond.GetBondType())])
+                e.append(Molecule.embed_lookup['stereo'][str(bond.GetStereo())])
+                e.append(1 if bond.GetIsConjugated() else 0)
+                e.append(1 if atom.IsInRing() else 0)
+
+                edge_indices += [[i, j], [j, i]]
+                edge_attrs += [e, e]
+
+        self.edge_indices = np.reshape(np.asarray(edge_indices, dtype=np.int64), (-1, 2))
+        self.edge_attr = np.reshape(np.asarray(edge_attrs, dtype=np.float32), (-1, 4))
+        
+        self.rdmol_block = Chem.MolToMolBlock(rdmol)
+        self.n_atoms = int(rdmol.GetNumAtoms())
+
+    def xyz_from_rdmol(self, rdmol):
+        xyz = []
+        if rdmol.GetNumConformers() == 0:
+            return xyz
+        else:
+            confs = self.rdmol.GetConformers()
+            for c in confs:
+                xyz.append(c.GetPositions())            
+            return np.stack(xyz, axis=-1)     
+            
     def distance_from_xyz(self, xyz):
-        m = np.zeros((len(xyz), 3))
-        for i, atom in enumerate(xyz):
-            m[i,:] = atom 
-        distance = sp.distance.squareform(sp.distance.pdist(m)).astype('float32')
-        return distance
+        #shape (n_atom, xyz, n_conformation)
+        distance = []
+        for conf in range(xyz.shape[2]):
+            m = np.zeros((xyz.shape[0], 3))
+            for i, atom in enumerate(xyz[:,:,conf]):
+                m[i,:] = atom 
+            distance.append(sp.distance.squareform(sp.distance.pdist(m)).astype('float32'))
+        return np.stack(distance, axis=-1)
         
     def create_coulomb(self, distance, atomic_number, sigma=1):
         """creates coulomb matrix obj attr.  set sigma to False to turn off random sorting.  
         sigma = stddev of gaussian noise.
         https://papers.nips.cc/paper/4830-learning-invariant-representations-of-\
         molecules-for-atomization-energy-prediction"""
-
-        qmat = atomic_number[None, :]*atomic_number[:, None]
-        idmat = np.linalg.inv(distance)
-        np.fill_diagonal(idmat, 0)
-        coul = qmat@idmat
-        np.fill_diagonal(coul, 0.5 * atomic_number ** 2.4)
-        if sigma:  
-            coulomb = self.sort_permute(coul, sigma)
-        else:  
-            coulomb = coul
-        return coulomb
+        conformations = []
+        for conf in range(distance.shape[2]):
+            qmat = atomic_number[None, :]*atomic_number[:, None]
+            idmat = np.linalg.inv(distance[:,:,conf])
+            np.fill_diagonal(idmat, 0)
+            coul = qmat@idmat
+            np.fill_diagonal(coul, 0.5 * atomic_number ** 2.4)
+            if sigma:  
+                coulomb = self.sort_permute(coul, sigma)
+            else:  
+                coulomb = coul
+            conformations.append(coulomb)
+        return np.stack(conformations, axis=-1)
     
     def sort_permute(self, matrix, sigma):
         norm = np.linalg.norm(matrix, axis=1)
@@ -90,8 +182,8 @@ class QM9Mol(Molecule):
                     'U0','U','H','G','Cv','qm9_n_atoms','qm9_block','qm9_atom_type',
                     'qm9_xyz','mulliken','in_file','smile','distance','coulomb']
     
-    def __init__(self, in_file=''):
-        self.load_molecule(in_file)
+    def __init__(self, in_file='', n_conformers=0):
+        self.load_molecule(in_file, n_conformers)
         
     def __repr__(self):
         return self.in_file[-20:-4]
@@ -103,7 +195,7 @@ class QM9Mol(Molecule):
         self.in_file = in_file
         self.qm9_block = self.open_file(in_file)
         self.smile = self.qm9_block[-2]
-        self.qm9_n_atoms = int(self.qm9_block[0])
+        qm9_n_atoms = int(self.qm9_block[0])
         
         an_lookup = {'H':1, 'C':6, 'N':7, 'O':8, 'F':8, '0':0}
         
@@ -114,7 +206,7 @@ class QM9Mol(Molecule):
         atom_type = []
         xyz = []
         mulliken = []
-        for atom in self.qm9_block[2:self.qm9_n_atoms+2]:
+        for atom in self.qm9_block[2:qm9_n_atoms+2]:
             stripped = atom.strip().split('\t') #[['atom_type',x,y,z,mulliken],...] 
             atom_type.append(stripped[0])
             xyz.append(np.reshape(np.asarray( #fix scientific notation
@@ -129,14 +221,22 @@ class QM9Mol(Molecule):
         self.qm9_atom_type = np.asarray(atom_type)
         self.mulliken = np.concatenate(mulliken, axis=0)
         self.qm9_xyz = np.reshape(np.concatenate(xyz), (-1, 3))
+        self.qm9_n_atoms = np.array(int(self.qm9_block[0]), dtype='int64', ndmin=1)
         
-    def load_molecule(self, in_file):
-        
+    def load_molecule(self, in_file, n_conformers):
         self.create_qm9_data(in_file) 
-        self.xyz = self.qm9_xyz
-        self.atom_type = self.qm9_atom_type
-        self.n_atoms = np.array(self.qm9_n_atoms, dtype='int64', ndmin=1)
-        self.atomic_number = self.qm9_atomic_number
+        self.rdmol_from_smile(self.smile)
+        self.create_rdmol_data(self.rdmol)
+        self.embed_rdmol(self.rdmol, n_conformers)
+            
+        if self.rdmol.GetNumConformers() == 0: #implies use qm9 data
+            self.xyz = np.expand_dims(self.qm9_xyz, axis=-1) # (n_atom,xyz,n_conformation)
+            self.atom_type = self.qm9_atom_type
+            self.n_atoms = self.qm9_n_atoms
+            self.atomic_number = self.qm9_atomic_number
+        else:
+            self.xyz = self.xyz_from_rdmol(self.rdmol)            
+            #self.adjacency = self.adjacency_from_rdmol_block(self.rdmol_block) 
             
         self.distance = self.distance_from_xyz(self.xyz)
         self.coulomb = self.create_coulomb(self.distance, self.atomic_number)
@@ -201,15 +301,40 @@ class QM9(CDataset):
     
     features/target = QM9.properties
     filter_on = ('property', 'test', 'value')
-    n = non random subset selection (for testing)
+    n = int (non random subset selection for testing)
     use_pickle = False/'qm9_datadic.p' (if file exists loads, if not creates and saves)
+    n_conformers = int (number of rdkit conforming geometry to create, uses stored qm9 database 
+        conformation if 0)
     """
     LOW_CONVERGENCE = [21725,87037,59827,117523,128113,129053,129152, 
                        129158,130535,6620,59818]
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-       
+
+
+    def __getitem__(self, i):         
+        """this func feeds the model's forward().  
+        the structure of the input_dict determines the structure of the output datadict
+        if no input_dict is provided the dataset's native __getitem__() is used
+        keywords = 'criterion_input','embed','model_input'
+        """
+        if self.input_dict == None:
+            return self.ds[i]
+
+        if self.n_conformers >= 2:
+            ci = random.randrange(self.n_conformers)
+            
+        datadic = {}
+        for input_key in self.input_dict:
+            datadic[input_key] = {}
+            for output_key in self.input_dict[input_key]:
+                out = self._get_features(self.ds[i], self.input_dict[input_key][output_key])
+                if out.ndim == 3:
+                    out = out[:,:,ci]
+                datadic[input_key][output_key] = out
+        return datadic
+    
     def open_file(self, in_file):
         with open(in_file) as f:
             data = []
@@ -218,8 +343,9 @@ class QM9(CDataset):
             return data
         
     def load_data(self, in_dir='./data/qm9/qm9.xyz/', n=133885, filter_on=None, 
-                  use_pickle=False, dtype='float32'):
-        
+                  use_pickle=False, dtype='float32', n_conformers=0):
+
+        self.n_conformers = n_conformers
         self.embed_lookup = Molecule.embed_lookup
         
         if use_pickle and os.path.exists('./data/qm9/'+use_pickle):
@@ -235,7 +361,7 @@ class QM9(CDataset):
 
             for filename in sorted(os.listdir(in_dir)):
                 if filename.endswith('.xyz'): #create the molecule
-                    datadic[int(filename[-10:-4])] = QM9Mol(in_dir+filename)
+                    datadic[int(filename[-10:-4])] = QM9Mol(in_dir+filename, n_conformers)
                     scanned += 1
 
                     if filter_on is not None: #filter the molecule
@@ -245,6 +371,10 @@ class QM9(CDataset):
                         
                         if not eval(val+filter_on[1]+filter_on[2]):
                             del datadic[int(filename[-10:-4])]
+                    
+                    if not datadic[int(filename[-10:-4])].rdmol.GetNumConformers() >= n_conformers:
+                        self.no_conf.append(filename[-10:-4])
+                        del datadic[int(filename[-10:-4])]
                     
                 if scanned % 10000 == 1:
                     print('molecules scanned: ', scanned)
