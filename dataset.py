@@ -75,7 +75,8 @@ class Molecule():
         return adjacency
     
     def embed_rdmol(self, rdmol, n_conformers):
-        AllChem.EmbedMultipleConfs(rdmol, numConfs=n_conformers, maxAttempts=0, useRandomCoords=False, numThreads=0)
+        AllChem.EmbedMultipleConfs(rdmol, numConfs=n_conformers, 
+                                       maxAttempts=0, useRandomCoords=False, numThreads=0)
 
     def create_rdmol_data(self, rdmol):
         atom_type = []
@@ -308,10 +309,11 @@ class QM9(CDataset):
     """
     LOW_CONVERGENCE = [21725,87037,59827,117523,128113,129053,129152, 
                        129158,130535,6620,59818]
+
+    embed_lookup = Molecule.embed_lookup
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
 
     def __getitem__(self, i):         
         """this func feeds the model's forward().  
@@ -321,18 +323,23 @@ class QM9(CDataset):
         """
         if self.input_dict == None:
             return self.ds[i]
+        #if multiple conformations randomly pick one and use the same 
+        #conformation index for all applicable features
+        if self.n_conformers <= 1: 
+            ci = 0
+        else: ci = random.randrange(self.n_conformers)
 
-        if self.n_conformers >= 2:
-            ci = random.randrange(self.n_conformers)
-            
         datadic = {}
         for input_key in self.input_dict:
             datadic[input_key] = {}
             for output_key in self.input_dict[input_key]:
                 out = self._get_features(self.ds[i], self.input_dict[input_key][output_key])
-                if out.ndim == 3:
+                if type(out) == list: #if list of embeddings
+                    datadic[input_key][output_key] = out
+                elif out.ndim == 3: #if multiple conformations
                     out = out[:,:,ci]
-                datadic[input_key][output_key] = out
+                    datadic[input_key][output_key] = out
+                
         return datadic
     
     def open_file(self, in_file):
@@ -346,7 +353,6 @@ class QM9(CDataset):
                   use_pickle=False, dtype='float32', n_conformers=0):
 
         self.n_conformers = n_conformers
-        self.embed_lookup = Molecule.embed_lookup
         
         if use_pickle and os.path.exists('./data/qm9/'+use_pickle):
             print('loading QM9 datadic from a pickled copy...')
