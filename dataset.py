@@ -325,21 +325,21 @@ class QM9(CDataset):
             return self.ds[i]
         #if multiple conformations randomly pick one and use the same 
         #conformation index for all applicable features
-        if self.n_conformers <= 1: 
-            ci = 0
+        if self.n_conformers <= 1: ci = 0
         else: ci = random.randrange(self.n_conformers)
 
         datadic = {}
         for input_key in self.input_dict:
             datadic[input_key] = {}
             for output_key in self.input_dict[input_key]:
-                out = self._get_features(self.ds[i], self.input_dict[input_key][output_key])
-                if type(out) == list: #if list of embeddings
-                    datadic[input_key][output_key] = out
-                elif out.ndim == 3: #if multiple conformations
-                    out = out[:,:,ci]
-                    datadic[input_key][output_key] = out
-                
+                _out = self._get_features(self.ds[i], self.input_dict[input_key][output_key])
+                if type(_out) == list: #if list of embeddings
+                    out = _out
+                elif _out.ndim == 3: #if multiple conformations
+                    out = _out[:,:,ci]
+                else:
+                    out = _out
+                datadic[input_key][output_key] = out
         return datadic
     
     def open_file(self, in_file):
