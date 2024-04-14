@@ -57,7 +57,7 @@ class Molecule():
             return data
 
     def rdmol_from_smile(self, smile):
-        self.rdmol = Chem.AddHs(Chem.MolFromSmiles(smile))
+        return Chem.AddHs(Chem.MolFromSmiles(smile))
 
     def adjacency_from_rdmol_block(self, rdmol_block):
         """use the V2000 chemical table's (rdmol MolBlock) adjacency list to create a 
@@ -78,7 +78,21 @@ class Molecule():
         AllChem.EmbedMultipleConfs(rdmol, numConfs=n_conformers, 
                                        maxAttempts=0, useRandomCoords=False, numThreads=0)
 
+    def adjacency_from_rdmol(self, rdmol):
+        return AllChem.GetAdjacencyMatrix(rdmol)
+
+    def distance_from_rdmol(self, rdmol):
+        distance = []
+        if rdmol.GetNumConformers() == 0:
+            return distance
+        else:
+            confs = self.rdmol.GetConformers()
+            for c in confs:
+                distance.append(AllChem.Get3DDistanceMatrix(rdmol, confId=c.GetId()))            
+            return np.stack(distance, axis=-1)     
+
     def create_rdmol_data(self, rdmol):
+        # create non-embedded rdkit molecule data
         atom_type = []
         atomic_number = []
         aromatic = []
@@ -226,20 +240,22 @@ class QM9Mol(Molecule):
         
     def load_molecule(self, in_file, n_conformers):
         self.create_qm9_data(in_file) 
-        self.rdmol_from_smile(self.smile)
+        self.rdmol = self.rdmol_from_smile(self.smile)
         self.create_rdmol_data(self.rdmol)
         self.embed_rdmol(self.rdmol, n_conformers)
             
         if self.rdmol.GetNumConformers() == 0: #implies use qm9 data
             self.xyz = np.expand_dims(self.qm9_xyz, axis=-1) # (n_atom,xyz,n_conformation)
+            self.distance = self.distance_from_xyz(self.xyz)
             self.atom_type = self.qm9_atom_type
             self.n_atoms = self.qm9_n_atoms
             self.atomic_number = self.qm9_atomic_number
         else:
             self.xyz = self.xyz_from_rdmol(self.rdmol)            
-            #self.adjacency = self.adjacency_from_rdmol_block(self.rdmol_block) 
-            
-        self.distance = self.distance_from_xyz(self.xyz)
+            self.adjacency = self.adjacency_from_rdmol(self.rdmol)
+            #self.adjacency = self.adjacency_from_rdmol_block(self.rdmol_block)
+            self.distance = self.distance_from_rdmol(self.rdmol)
+        
         self.coulomb = self.create_coulomb(self.distance, self.atomic_number)
 
 
