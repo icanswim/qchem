@@ -20,12 +20,9 @@ mkdir logs
 mkdir models
 conda create --name qchem
 conda activate qchem
-conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
-conda install -c conda-forge matplotlib
-conda install -c conda-forge scipy pandas scikit-learn
-conda install -c conda-forge jupyterlab h5py git
-conda install -c conda-forge numpy
-conda install pyg -c pyg
+conda config --add channels nvidia pytorch pyg conda-forge
+conda install pytorch torchvision torchaudio pytorch-cuda=12.1 rdkit pyg
+conda install matplotlib scipy pandas scikit-learn jupyterlab h5py git numpy
 jupyter lab
 
 ##download the source data for the dataset class
