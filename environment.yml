@@ -1,4 +1,4 @@
-name: rdkit
+name: qchem
 channels:
   - nvidia
   - pytorch
@@ -276,4 +276,4 @@ dependencies:
   - zeromq=4.3.5=h6a678d5_0
   - zlib=1.2.13=hd590300_5
   - zstd=1.5.5=hc292b87_0
-prefix: /home/fltr/miniconda3/envs/rdkit
+prefix: /home/fltr/miniconda3/envs/qchem

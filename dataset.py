@@ -106,7 +106,7 @@ class Molecule():
         for atom in rdmol.GetAtoms():
             atom_type.append(atom.GetSymbol())
             atomic_number.append(atom.GetAtomicNum()) 
-            aromatic.append(1 if atom.GetIsAromatic() else 0)
+            aromatic.append(atom.GetIsAromatic())
             chirality.append(str(atom.GetChiralTag()))
             degree.append(atom.GetTotalDegree())
             charge.append(atom.GetFormalCharge())
