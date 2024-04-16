@@ -182,7 +182,7 @@ class Molecule():
             else:  
                 coulomb = coul
             conformations.append(coulomb)
-        return np.stack(conformations, axis=-1)
+        return np.stack(conformations, axis=-1).astype('float32')
     
     def sort_permute(self, matrix, sigma):
         norm = np.linalg.norm(matrix, axis=1)
