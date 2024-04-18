@@ -348,15 +348,35 @@ class QM9(CDataset):
         for input_key in self.input_dict:
             datadic[input_key] = {}
             for output_key in self.input_dict[input_key]:
-                _out = self._get_features(self.ds[i], self.input_dict[input_key][output_key])
+                out = self._get_features(self.ds[i], self.input_dict[input_key][output_key], ci)
+                datadic[input_key][output_key] = out
+        return datadic
+
+    def _get_features(self, data, features, ci):
+        """load, transform then concatenate selected features"""
+        output = []
+        for f in features:
+            if type(data) == dict: 
+                _out = data[f]
+            else:
+                _out = getattr(data, f)
+                
                 if type(_out) == list: #if list of embeddings
                     out = _out
                 elif _out.ndim == 3: #if multiple conformations
                     out = _out[:,:,ci]
                 else:
                     out = _out
-                datadic[input_key][output_key] = out
-        return datadic
+                    
+            if f in self.transforms:
+                transforms = self.transforms[f] #get the list of transforms for this feature
+                for T in transforms:
+                    out = T(out)
+            output.append(out)
+            
+        if len(output) == 1: return output[0] 
+        elif type(output[0]) == list:  return output
+        else: return np.concatenate(output)
     
     def open_file(self, in_file):
         with open(in_file) as f:

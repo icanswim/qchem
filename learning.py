@@ -255,15 +255,10 @@ class Learn():
         
         if load_embed is not None:
             for i, embedding in enumerate(model.embeddings):
-                try:
-                    weight = np.load('./models/{}_{}_embedding_weight.npy'.format(
-                                                                            load_embed, i))
-                    embedding.from_pretrained(from_numpy(weight), 
-                                              freeze=model_params['embeds'][i][4])
-                    print('loading embedding weights...')
-                except:
-                    print('no embedding weights found.  initializing... ')
-                    
+                weight = np.load('./models/{}_{}_embedding_weight.npy'.format(load_embed, i))
+                embedding.from_pretrained(from_numpy(weight), freeze=model_params['embed_params'][i][4])
+            print('loading embedding weights...')
+          
         if adapt is not None: model.adapt(*adapt)
         
         if self.gpu:
@@ -362,8 +357,8 @@ class Learn():
                             #if input is a list of lists of embedding indices
                             if type(data[d][j]) == list: 
                                 datalists = []
-                                for k in data[d][j]: 
-                                    datalists.append(k.to('cuda:0', non_blocking=True))
+                                for k in data[d][j]:
+                                    datalists.append(k[0].to('cuda:0', non_blocking=True))
                                 _data[d][j] = datalists
                             else:
                                 _data[d][j] = data[d][j].to('cuda:0', non_blocking=True)
