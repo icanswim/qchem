@@ -171,17 +171,20 @@ class Molecule():
         https://papers.nips.cc/paper/4830-learning-invariant-representations-of-\
         molecules-for-atomization-energy-prediction"""
         conformations = []
-        for conf in range(distance.shape[2]):
-            qmat = atomic_number[None, :]*atomic_number[:, None]
-            idmat = np.linalg.inv(distance[:,:,conf])
-            np.fill_diagonal(idmat, 0)
-            coul = qmat@idmat
-            np.fill_diagonal(coul, 0.5 * atomic_number ** 2.4)
-            if sigma:  
-                coulomb = self.sort_permute(coul, sigma)
-            else:  
-                coulomb = coul
-            conformations.append(coulomb)
+        for conf in range(distance.shape[2]): 
+            try: #singular matrix fail and are discarded
+                qmat = atomic_number[None, :]*atomic_number[:, None]
+                idmat = np.linalg.inv(distance[:,:,conf])
+                np.fill_diagonal(idmat, 0)
+                coul = qmat@idmat
+                np.fill_diagonal(coul, 0.5 * atomic_number ** 2.4)
+                if sigma:  
+                    coulomb = self.sort_permute(coul, sigma)
+                else:  
+                    coulomb = coul
+                conformations.append(coulomb)
+            except:
+                print('singular matrix discarded.  mol: {} conf: {}'.format(self.__repr__(), conf))
         return np.stack(conformations, axis=-1).astype('float32')
     
     def sort_permute(self, matrix, sigma):
@@ -244,7 +247,7 @@ class QM9Mol(Molecule):
         self.create_rdmol_data(self.rdmol)
         self.embed_rdmol(self.rdmol, n_conformers)
             
-        if self.rdmol.GetNumConformers() == 0: #implies use qm9 data
+        if self.rdmol.GetNumConformers() == 0: #implies use qm9 hardcopy data
             self.xyz = np.expand_dims(self.qm9_xyz, axis=-1) # (n_atom,xyz,n_conformation)
             self.distance = self.distance_from_xyz(self.xyz)
             self.atom_type = self.qm9_atom_type
@@ -252,10 +255,9 @@ class QM9Mol(Molecule):
             self.atomic_number = self.qm9_atomic_number
         else:
             self.xyz = self.xyz_from_rdmol(self.rdmol)            
-            self.adjacency = self.adjacency_from_rdmol(self.rdmol)
-            #self.adjacency = self.adjacency_from_rdmol_block(self.rdmol_block)
             self.distance = self.distance_from_rdmol(self.rdmol)
-        
+            
+        self.adjacency = self.adjacency_from_rdmol(self.rdmol)
         self.coulomb = self.create_coulomb(self.distance, self.atomic_number)
 
 
@@ -434,6 +436,7 @@ class QM9(CDataset):
                     
             print('total molecules scanned: ', scanned)
             print('total uncharacterized molecules removed: ', len(self.unchar))
+            print('total molecules removed for insuffient rdmol conformations: ', len(self.no_conf))
             print('total molecules created: ', len(datadic))
             
             if use_pickle:
