@@ -27,7 +27,7 @@ class Molecule():
     
     embed_lookup = {'hybridization': {'UNSPECIFIED':1, 'S':2, 'SP':3, 'SP2':4,
                                       'SP3':5, 'SP3D':6, 'SP3D2':7, 'OTHER':8, '0':0},
-                    'chirality': {'CHI_UNSPECIFIED':1, 'CHI_TETRAHEDRAL_CW':2,
+                    'chirality': {'CHI_UNSPECIFIED':1, 'CHI_UNSPEC\x8eFIED': 1, 'CHI_TETRAHEDRAL_CW':2,
                                   'CHI_TETRAHEDRAL_CCW':3, 'CHI_OTHER':4, '0':0},
                     'bond_type': {'misc':1, 'SINGLE':2, 'DOUBLE':3, 
                                   'TRIPLE':4, 'AROMATIC':5, '0':0},
@@ -76,7 +76,7 @@ class Molecule():
     
     def embed_rdmol(self, rdmol, n_conformers):
         AllChem.EmbedMultipleConfs(rdmol, numConfs=n_conformers, 
-                                       maxAttempts=0, useRandomCoords=False, numThreads=0)
+                                       maxAttempts=n_conformers, useRandomCoords=False, numThreads=0)
 
     def adjacency_from_rdmol(self, rdmol):
         return AllChem.GetAdjacencyMatrix(rdmol)
@@ -185,6 +185,7 @@ class Molecule():
                 conformations.append(coulomb)
             except:
                 print('singular matrix discarded.  mol: {} conf: {}'.format(self.__repr__(), conf))
+
         return np.stack(conformations, axis=-1).astype('float32')
     
     def sort_permute(self, matrix, sigma):
@@ -246,14 +247,16 @@ class QM9Mol(Molecule):
         self.rdmol = self.rdmol_from_smile(self.smile)
         self.create_rdmol_data(self.rdmol)
         self.embed_rdmol(self.rdmol, n_conformers)
-            
-        if self.rdmol.GetNumConformers() == 0: #implies use qm9 hardcopy data
+        
+        if self.rdmol.GetNumConformers() == 0 or self.rdmol.GetNumConformers() != n_conformers:
+            #use QM9 hardcopy data
             self.xyz = np.expand_dims(self.qm9_xyz, axis=-1) # (n_atom,xyz,n_conformation)
             self.distance = self.distance_from_xyz(self.xyz)
             self.atom_type = self.qm9_atom_type
             self.n_atoms = self.qm9_n_atoms
             self.atomic_number = self.qm9_atomic_number
         else:
+            #use rdkit data
             self.xyz = self.xyz_from_rdmol(self.rdmol)            
             self.distance = self.distance_from_rdmol(self.rdmol)
             
