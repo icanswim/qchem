@@ -1,16 +1,15 @@
 # qchem
-An exploration of the state of the art in the application of datascience to molecular quantum mechanics. 
+A bleeding edge framework for molecular modeling.  This framework combines the most powerful open-source libaries for machine learning, geometric deep learning, molecular modeling, cheminformatics and full featured molecular datasets while remaining light weight, modular and extendable.  
 
 From Machine Learning for Molecular Simulation  
 >In 1929 Paul Dirac stated that: “The underlying physical laws necessary for the mathematical theory of a large part of physics and the whole of chemistry are thus completely known, and the difficulty is only that the exact application of these laws leads to equations much too complicated to be soluble.  It therefore becomes desirable that approximate practical methods of applying quantum mechanics should be developed, which can lead to an explanation of the main features of complex atomic systems without too much computation.”  Ninety years later,  this quote is still state of the art.  However, in the last decade, new tools from the rapidly developing field of machine learning (ML) have started to make significant impact on the development of approximate methods for complex atomic systems, bypassing the direct solution of “equations much too complicated to be soluble”.
 
 ## Datasets, models and learners implemented in pytorch 
 * light weight, modular, extendable
-* pytorch=2.1.1, pyg=2.4, cuda=12.1, python=3.11.5
-* uses the icanswim/cosmosis-main datascience repo for rapid prototyping
+* pytorch=2.2.2, pyg=2.5.2, cuda=12.1, python=3.12.2, rdkit=2024.03.1, scikit-learn=1.4
+* uses the icanswim/cosmosis datascience repo for rapid prototyping
 * see setup_notes.txt for implementation details
 * see experiment.ipynb for examples
-
 
 ## References 
 ICLR 2021 Keynote: Geometric Deep Learning  
@@ -18,9 +17,6 @@ https://youtu.be/w6Pw4MOzMuo
 
 Geometric Deep Learning: Grids, Groups, Graphs, Geodesics, and Gauges  
 https://arxiv.org/abs/2104.13478 
-
-Valence Discovery  
-https://www.youtube.com/channel/UC3ew3t5al4sN-Zk01DGVKlg 
 
 GeoMol: Torsional Geometric Generation of Molecular 3D Conformer Ensembles  
 https://arxiv.org/abs/2106.07802  
@@ -38,6 +34,9 @@ https://github.com/vijaydwivedi75/gnn-lspe
 
 Physics-based Deep Learning  
 https://arxiv.org/abs/2109.05237 
+
+Everything is Connected: Graph Neural Networks  
+https://arxiv.org/abs/2301.08210 
 
 AlphaFold  
 https://www.nature.com/articles/s41586-021-03819-2  
