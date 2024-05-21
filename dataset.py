@@ -12,13 +12,13 @@ from scipy import spatial as sp
 from scipy.io import loadmat
 from scipy.sparse import coo_matrix
 
-from torch_geometric.data import Dataset
-
 from torch_geometric import datasets as pgds
 from torch_geometric.data import Data
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
+
+from torch import cat as torch_cat
 
 
 class Molecule():
@@ -135,11 +135,12 @@ class Molecule():
                 e.append(Molecule.embed_lookup['stereo'][str(bond.GetStereo())])
                 e.append(1 if bond.GetIsConjugated() else 0)
                 e.append(1 if atom.IsInRing() else 0)
-
+                
                 edge_indices += [[i, j], [j, i]]
                 edge_attrs += [e, e]
 
-        self.edge_indices = np.reshape(np.asarray(edge_indices, dtype=np.int64), (-1, 2))
+        edge_indices = np.reshape(np.asarray(edge_indices, dtype=np.int64), (-1, 2)).T
+        self.edge_indices = np.ascontiguousarray(edge_indices)
         self.edge_attr = np.reshape(np.asarray(edge_attrs, dtype=np.float32), (-1, 4))
         
         self.rdmol_block = Chem.MolToMolBlock(rdmol)
@@ -170,22 +171,32 @@ class Molecule():
         sigma = stddev of gaussian noise.
         https://papers.nips.cc/paper/4830-learning-invariant-representations-of-\
         molecules-for-atomization-energy-prediction"""
+        #np.seterr(over='ignore')
         conformations = []
         for conf in range(distance.shape[2]): 
-            try: #singular matrix fail and are discarded
+            #singular or malformed matrix fail and are discarded
+            try: 
                 qmat = atomic_number[None, :]*atomic_number[:, None]
                 idmat = np.linalg.inv(distance[:,:,conf])
                 np.fill_diagonal(idmat, 0)
                 coul = qmat@idmat
                 np.fill_diagonal(coul, 0.5 * atomic_number ** 2.4)
+            except RuntimeWarning as r:
+                print('RuntimeWarning: ', r)
+                print('matrix discarded... mol: {} conf: {}'.format(self.__repr__(), conf))
+                print('atomic_number: ', atomic_number)
+                print('distance: ', distance)
+                print('qmat: ', qmat)
+                print('idmat: ', idmat)
+            except Exception as e:
+                print('Exception: ', e)
+                print('matrix discarded...  mol: {} conf: {}'.format(self.__repr__(), conf))
+            else:
                 if sigma:  
                     coulomb = self.sort_permute(coul, sigma)
                 else:  
                     coulomb = coul
                 conformations.append(coulomb)
-            except:
-                print('singular matrix discarded.  mol: {} conf: {}'.format(self.__repr__(), conf))
-
         return np.stack(conformations, axis=-1).astype('float32')
     
     def sort_permute(self, matrix, sigma):
@@ -214,6 +225,7 @@ class QM9Mol(Molecule):
         self.in_file = in_file
         self.qm9_block = self.open_file(in_file)
         self.smile = self.qm9_block[-2]
+        self.idx = np.asarray(int(self.in_file[-10:-4]), dtype='int64')
         qm9_n_atoms = int(self.qm9_block[0])
         
         an_lookup = {'H':1, 'C':6, 'N':7, 'O':8, 'F':8, '0':0}
@@ -262,7 +274,6 @@ class QM9Mol(Molecule):
             
         self.adjacency = self.adjacency_from_rdmol(self.rdmol)
         self.coulomb = self.create_coulomb(self.distance, self.atomic_number)
-
 
 class QM9(CDataset):
     """http://quantum-machine.org
@@ -355,7 +366,13 @@ class QM9(CDataset):
             for output_key in self.input_dict[input_key]:
                 out = self._get_features(self.ds[i], self.input_dict[input_key][output_key], ci)
                 datadic[input_key][output_key] = out
-        return datadic
+
+        if not self.dict2data:
+            return datadic
+        else:
+            _datadic = datadic['model_input']
+            _datadic.update(datadic['criterion_input'])
+            return Data.from_dict(_datadic)
 
     def _get_features(self, data, features, ci):
         """load, transform then concatenate selected features"""
@@ -381,7 +398,8 @@ class QM9(CDataset):
             
         if len(output) == 1: return output[0] 
         elif type(output[0]) == list:  return output
-        else: return np.concatenate(output)
+        elif self.dict2data: return torch_cat(output, dim=1)                 
+        else: return np.concatenate(output, axis=0)
     
     def open_file(self, in_file):
         with open(in_file) as f:
@@ -391,9 +409,10 @@ class QM9(CDataset):
             return data
         
     def load_data(self, in_dir='./data/qm9/qm9.xyz/', n=133885, filter_on=None, 
-                  use_pickle=False, dtype='float32', n_conformers=0):
+                  use_pickle=False, dtype='float32', n_conformers=0, dict2data=False):
 
         self.n_conformers = n_conformers
+        self.dict2data = dict2data
         
         if use_pickle and os.path.exists('./data/qm9/'+use_pickle):
             print('loading QM9 datadic from a pickled copy...')
@@ -943,4 +962,4 @@ class PGDS(CDataset):
         self.ds_idx = list(range(len(ds)))
         return ds
                 
-          
+      

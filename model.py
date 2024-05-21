@@ -136,6 +136,7 @@ class GraphNet(CModel):
     def forward(self, data):
         x = data.x
         
+        
         for i, l in enumerate(self.layers):
             
             if self.convolution in ['NetConv']:
