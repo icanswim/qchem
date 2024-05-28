@@ -20,20 +20,21 @@ from model import EncoderLoss
 
 class Metrics():
 
-    def __init__(self, report_interval=10, sk_metric_name=None, 
-                     log_plot=False, sk_params={}):
+    def __init__(self, report_interval=60, sk_metric_name=None, 
+                     log_plot=False, min_lr=.00125, sk_params={}):
         
         self.start = datetime.now()
         self.report_time = self.start
         self.report_interval = report_interval
         self.log_plot = log_plot
+        self.min_lr = min_lr
         
         self.epoch, self.e_loss, self.predictions = 0, [], []
         self.train_loss, self.val_loss, self.lr_log = [], [], []
         
         self.sk_metric_name, self.sk_params = sk_metric_name, sk_params
         self.skm, self.sk_train_log, self.sk_val_log = None, [], []
-        self.sk_y, self.sk_pred = [], []
+        self.sk_y, self.last_y, self.sk_pred, self.last_pred = [], [], [], []
         if self.sk_metric_name is not None:
             self.skm = getattr(metrics, self.sk_metric_name)
             
@@ -48,6 +49,7 @@ class Metrics():
 
     def sk_metric(self, flag):
         """TODO multiple sk metrics"""
+    
         def softmax(x): return np.exp(x)/sum(np.exp(x))
 
         def softmax_overflow(x):
@@ -64,13 +66,14 @@ class Metrics():
         if self.sk_metric_name == 'accuracy_score' and y_pred.ndim == 2:
             y_pred = np.argmax(y_pred, axis=1)
 
-        score = self.skm(y, y_pred, **self.sk_params)
+        if self.sk_metric_name is not None:
+            score = self.skm(y, y_pred, **self.sk_params)
+            if flag == 'train':
+                self.sk_train_log.append(score)
+            else:
+                self.sk_val_log.append(score)
 
-        if flag == 'train':
-            self.sk_train_log.append(score)
-        else:
-            self.sk_val_log.append(score)
-
+        self.last_y, self.last_pred = y[-5:], y_pred[-5:]
         self.sk_y, self.sk_pred = [], []
         
     def loss(self, flag, loss):
@@ -88,26 +91,33 @@ class Metrics():
     def status_report(self, now=False):
         
         def print_report():
+            print('\n...........................')
             print('learning time: {}'.format(datetime.now()-self.start))
             print('epoch: {}, lr: {}'.format(self.epoch, self.lr_log[-1]))
             print('train loss: {}, val loss: {}'.format(self.train_loss[-1], self.val_loss[-1]))
+            print('last 5 targets: \n{}'.format(self.last_y))
+            print('last 5 predictions: \n{}'.format(self.last_pred))
             if self.skm is not None:
                 print('sklearn train metric: {}, sklearn validation metric: {}'.format(
-                                                    self.sk_train_log[-1], self.sk_val_log[-1]))
+                                                        self.sk_train_log[-1], self.sk_val_log[-1]))
             self.report_time = datetime.now()
         
         if now:
             print_report()
         else:
             elapsed = datetime.now() - self.report_time
-            if elapsed.total_seconds() > self.report_interval or self.epoch % 10 == 0:
+            if elapsed.total_seconds() > self.report_interval or self.epoch==1:
                 print_report()
         
         
     def report(self):
         elapsed = datetime.now() - self.start
+        print('\n...........................')
         self.log('learning time: {} \n'.format(elapsed))
         print('learning time: {}'.format(elapsed))
+        print('last 5 targets: \n{}'.format(self.last_y))
+        print('last 5 predictions: \n{}'.format(self.last_pred))
+        
         if self.skm is not None:
             self.log('sklearn test metric: \n{} \n'.format(self.sk_val_log[-1]))
             print('sklearn test metric: \n{} \n'.format(self.sk_val_log[-1]))
@@ -290,12 +300,16 @@ class Learn():
             self.scheduler = Scheduler(self.opt, **sched_params)
             self.metrics.log('scheduler: {}\n{}'.format(self.scheduler, sched_params))
             
-            for e in range(epochs):
+            for e in range(epochs): 
                 self.metrics.epoch = e
                 self.sampler.shuffle_train_val_idx()
                 self.run('train')
                 with no_grad():
                     self.run('val')
+                    if e > 1 and  self.metrics.lr_log[-1] <= self.metrics.min_lr:
+                        self.metrics.status_report(now=True)
+                        print('early stopping!  learning rate is below the set minimum...')
+                        break
                 
             with no_grad():
                 self.run('test')
@@ -340,7 +354,8 @@ class Learn():
             self.model.training = False
             dataset = self.test_ds
             drop_last = False
-        
+
+        nonblocking = True
         dataloader = self.DataLoader(dataset, batch_size=self.bs, 
                                      sampler=self.sampler(flag=flag), 
                                      num_workers=8, pin_memory=False, 
@@ -358,14 +373,14 @@ class Learn():
                             if type(data[d][j]) == list: 
                                 datalists = []
                                 for k in data[d][j]:
-                                    datalists.append(k[0].to('cuda:0', non_blocking=True))
+                                    datalists.append(k[0].to('cuda:0', non_blocking=nonblocking))
                                 _data[d][j] = datalists
                             else:
-                                _data[d][j] = data[d][j].to('cuda:0', non_blocking=True)
+                                _data[d][j] = data[d][j].to('cuda:0', non_blocking=nonblocking)
                     data = _data
                     y_pred = self.model(data['model_input'])
                 else: #if data class object
-                    data = data.to('cuda:0', non_blocking=True)
+                    data = data.to('cuda:0', non_blocking=nonblocking)
                     y_pred = self.model(data)
                 if self.squeeze_y_pred: y_pred = squeeze(y_pred)
                 
@@ -382,9 +397,8 @@ class Learn():
                 else:
                     b_loss = self.criterion(y_pred, y)
                 e_loss += b_loss.item()
-                if self.metrics.skm is not None:
-                    self.metrics.sk_y.append(y.detach().cpu().numpy())
-                    self.metrics.sk_pred.append(y_pred.detach().cpu().numpy())
+                self.metrics.sk_y.append(y.detach().cpu().numpy())
+                self.metrics.sk_pred.append(y_pred.detach().cpu().numpy())
                 if flag == 'train':
                     b_loss.backward()
                     self.opt.step()
@@ -393,7 +407,7 @@ class Learn():
             self.metrics.infer()
         else:
             self.metrics.loss(flag, e_loss/i)
-            if self.metrics.skm is not None: self.metrics.sk_metric(flag)
+            self.metrics.sk_metric(flag)
             
         if flag == 'val': 
             self.scheduler.step(e_loss/i)
