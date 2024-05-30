@@ -157,7 +157,10 @@ class Molecule():
             return np.stack(xyz, axis=-1)     
             
     def distance_from_xyz(self, xyz):
-        #shape (n_atom, xyz, n_conformation)
+        #can take shape (n_atom, xyz) or (n_atoms, xyz, n_conformation)
+        if np.ndim(xyz) == 2:  
+            xyz = np.expand_dims(xyz, axis=2)
+
         distance = []
         for conf in range(xyz.shape[2]):
             m = np.zeros((xyz.shape[0], 3))
@@ -679,6 +682,7 @@ class QM7X(CDataset, Molecule):
     https://zenodo.org/record/3905361
     
     Decompress the .xz files in the 'in_dir' folder (qchem/data/qm7x/)
+    tar xvf filename.xz
     
     1000.hdf5 6.5 GB
     2000.hdf5 8.8 GB
