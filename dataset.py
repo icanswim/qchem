@@ -377,7 +377,7 @@ class QM9(CDataset):
             _datadic.update(datadic['criterion_input'])
             return Data.from_dict(_datadic)
 
-    def _get_features(self, data, features, ci):
+    def _get_features(self, data, features, ci=0):
         """load, transform then concatenate selected features"""
         output = []
         for f in features:
@@ -399,11 +399,11 @@ class QM9(CDataset):
                     out = T(out)
             output.append(out)
             
-        if len(output) == 1: return output[0] 
-        elif type(output[0]) == list:  return output
-        elif self.dict2data: return torch_cat(output, dim=1)                 
-        else: return np.concatenate(output, axis=0)
-    
+        if len(output) == 1: return output[0] #list with a single feature, just return feature
+        elif type(output[0]) == list:  return output #list of lists therefore embedding, return embedding
+        elif self.dict2data: return torch_cat(output, dim=1) #list of torch features, concat and return            
+        else: return np.concatenate(output, axis=0) #list of numpy features, concat and return
+
     def open_file(self, in_file):
         with open(in_file) as f:
             data = []
@@ -432,26 +432,25 @@ class QM9(CDataset):
                 if filename.endswith('.xyz'): #create the molecule
                     datadic[int(filename[-10:-4])] = QM9Mol(in_dir+filename, n_conformers)
                     scanned += 1
-
-                    if filter_on is not None: #filter the molecule
-                        val = self._get_features(datadic[int(filename[-10:-4])], 
-                                                     [filter_on[0]])
-                        val = np.array2string(val, precision=4, floatmode='maxprec')[1:-1]
-                        
-                        if not eval(val+filter_on[1]+filter_on[2]):
-                            del datadic[int(filename[-10:-4])]
-                    
+                    #check conformations exist
                     if not datadic[int(filename[-10:-4])].rdmol.GetNumConformers() >= n_conformers:
                         self.no_conf.append(filename[-10:-4])
                         del datadic[int(filename[-10:-4])]
-                    
+                    #filter the molecule
+                    elif filter_on is not None: 
+                        val = self._get_features(datadic[int(filename[-10:-4])], 
+                                                     [filter_on[0]])
+                        val = np.array2string(val, precision=4, floatmode='maxprec')[1:-1]
+                        if not eval(val+filter_on[1]+filter_on[2]):
+                            del datadic[int(filename[-10:-4])]
+
                 if scanned % 10000 == 1:
                     print('molecules scanned: ', scanned)
                     print('molecules created: ', len(datadic))
 
                 if len(datadic) > n - 1:
                     break
-            
+            #check for known false molecules
             self.unchar = []
             uncharacterized = self.get_uncharacterized()
             for mol in uncharacterized: 
@@ -572,8 +571,14 @@ class ANI1x(CDataset, Molecule):
             datadic[input_key] = {}
             for output_key in self.input_dict[input_key]:
                 out = self._get_features(self.ds[i], self.input_dict[input_key][output_key], ci)     
-                datadic[input_key][output_key] = out        
-        return datadic   
+                datadic[input_key][output_key] = out
+
+        if not self.dict2data:
+            return datadic
+        else:
+            _datadic = datadic['model_input']
+            _datadic.update(datadic['criterion_input'])
+            return Data.from_dict(_datadic)
         
     def _get_features(self, datadic, features, ci):
         output = []
@@ -642,7 +647,7 @@ class ANI1x(CDataset, Molecule):
             return datadic, nan #returns datadic, nan=False
         return datadic, nan #breaks out returns datadic, nan=True
                     
-    def load_data(self, in_file='./data/ani1x/ani1x-release.h5'):
+    def load_data(self, in_file='./data/ani1x/ani1x-release.h5', dict2data=False):
         """data_keys = ['wb97x_dz.energy','wb97x_dz.forces'] 
         # Original ANI-1x data (https://doi.org/10.1063/1.5023802)
         data_keys = ['wb97x_tz.energy','wb97x_tz.forces'] 
@@ -656,6 +661,7 @@ class ANI1x(CDataset, Molecule):
         ragged dataset each mol has all keys and nan for missing values
         throws out the mol if any of the feature values or criterion feature values are missing
         """
+        self.dict2data = dict2data
         datadic = {}
         with h5py.File(in_file, 'r') as f:
             for mol in f.keys():
@@ -804,7 +810,13 @@ class QM7X(CDataset, Molecule):
             for output_key in self.input_dict[input_key]:
                 out = self._get_features(self.ds[i][idconf], self.input_dict[input_key][output_key])
                 datadic[input_key][output_key] = out
-        return datadic
+                
+        if not self.dict2data:
+            return datadic
+        else:
+            _datadic = datadic['model_input']
+            _datadic.update(datadic['criterion_input'])
+            return Data.from_dict(_datadic)
     
     def _load_features(self, mol, dtype='float32'):
         datadic = {}
@@ -820,7 +832,7 @@ class QM7X(CDataset, Molecule):
             datadic[p] = out.astype(dtype)
         return datadic
         
-    def load_data(self, selector='opt', in_dir='./data/qm7x/', n=6950):
+    def load_data(self, selector='opt', in_dir='./data/qm7x/', n=6950, dict2data=False):
         """seletor = list of regular expression strings (attr) for searching 
         and selecting idconf keys.
         n = non-random subset for testing
@@ -828,6 +840,7 @@ class QM7X(CDataset, Molecule):
         idconf = ID configuration (e.g., 'Geom-m1-i1-c1-opt', 'Geom-m1-i1-c1-50')
         datadic[idmol][idconf][feature]
         """
+        self.dict2data = dict2data
         datadic = {}
         structure_count = 0
         for set_id in QM7X.set_ids:
