@@ -19,6 +19,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from torch import cat as torch_cat
+from torch import is_tensor
 
 
 class Molecule():
@@ -278,7 +279,56 @@ class QM9Mol(Molecule):
         self.adjacency = self.adjacency_from_rdmol(self.rdmol)
         self.coulomb = self.create_coulomb(self.distance, self.atomic_number)
 
-class QM9(CDataset):
+class QDataset(CDataset):
+
+    def __init__(self, criterion=None, conformation=None, n_conformers=0, **kwargs):
+        self.criterion = criterion
+        self.conformation = conformation
+        self.n_conformers = n_conformers
+        super().__init__(**kwargs)
+        print('QDataset created...')
+        
+    def __getitem__(self, i):         
+
+        if self.input_dict == None:
+            return self.ds[i]
+
+        ci = self._get_conformation_index(self.ds[i])
+
+        datadic = {}
+        for input_key, features in self.input_dict.items():
+            datadic[input_key] = self._get_features(self.ds[i], features, ci)
+
+        if not self.dict2data:
+            return datadic
+        else:
+            return Data.from_dict(datadic)
+            
+    def _get_conformation_index(self, datadic):
+        """each molecular formula (mol) may have many different isomers
+        select the conformation based on some criterion (attribute value)
+        """
+        if self.n_conformers <= 1:
+            return 0
+        
+        if self.criterion is None:
+            self.criterion = self.input_dict['y']
+        
+        if self.conformation == None: 
+            self.conformation = 'random'
+            
+        if isinstance(self.conformation, int):
+            ci = self.conformation
+        elif self.conformation == 'random':
+            ci = random.randrange(datadic[self.criterion].shape[0])
+        elif self.conformation == 'max':
+            ci = np.argmax(datadic[self.criterion], axis=0)
+        elif self.conformation == 'min':
+            ci = np.argmin(datadic[self.criterion], axis=0)
+            
+        return ci
+
+class QM9(QDataset):
     """http://quantum-machine.org
     
     Dataset source/download:
@@ -347,36 +397,6 @@ class QM9(CDataset):
 
     embed_lookup = Molecule.embed_lookup
     
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def __getitem__(self, i):         
-        """this func feeds the model's forward().  
-        the structure of the input_dict determines the structure of the output datadict
-        if no input_dict is provided the dataset's native __getitem__() is used
-        keywords = 'criterion_input','embed','model_input'
-        """
-        if self.input_dict == None:
-            return self.ds[i]
-        #if multiple conformations randomly pick one and use the same 
-        #conformation index for all applicable features
-        if self.n_conformers <= 1: ci = 0
-        else: ci = random.randrange(self.n_conformers)
-
-        datadic = {}
-        for input_key in self.input_dict:
-            datadic[input_key] = {}
-            for output_key in self.input_dict[input_key]:
-                out = self._get_features(self.ds[i], self.input_dict[input_key][output_key], ci)
-                datadic[input_key][output_key] = out
-
-        if not self.dict2data:
-            return datadic
-        else:
-            _datadic = datadic['model_input']
-            _datadic.update(datadic['criterion_input'])
-            return Data.from_dict(_datadic)
-
     def _get_features(self, data, features, ci=0):
         """load, transform then concatenate selected features"""
         output = []
@@ -386,9 +406,7 @@ class QM9(CDataset):
             else:
                 _out = getattr(data, f)
                 
-                if type(_out) == list: #if list of embeddings
-                    out = _out
-                elif _out.ndim == 3: #if multiple conformations
+                if _out.ndim == 3: #if multiple conformations
                     out = _out[:,:,ci]
                 else:
                     out = _out
@@ -397,12 +415,14 @@ class QM9(CDataset):
                 transforms = self.transforms[f] #get the list of transforms for this feature
                 for T in transforms:
                     out = T(out)
+                    
             output.append(out)
-            
-        if len(output) == 1: return output[0] #list with a single feature, just return feature
-        elif type(output[0]) == list:  return output #list of lists therefore embedding, return embedding
-        elif self.dict2data: return torch_cat(output, dim=1) #list of torch features, concat and return            
-        else: return np.concatenate(output, axis=0) #list of numpy features, concat and return
+
+        
+        cat_dim = output[0].ndim -1 
+        if len(output) == 1: return output[0] 
+        elif is_tensor(output[0]): return torch_cat(output, dim=cat_dim)
+        else: return np.concatenate(output, axis=cat_dim)
 
     def open_file(self, in_file):
         with open(in_file) as f:
@@ -484,7 +504,7 @@ class QM9(CDataset):
         return unchar
         
         
-class ANI1x(CDataset, Molecule):
+class ANI1x(QDataset, Molecule):
     """https://www.nature.com/articles/s41597-020-0473-z#Sec11
     https://github.com/aiqm/ANI1x_datasets
     
@@ -556,29 +576,7 @@ class ANI1x(CDataset, Molecule):
                   'wb97x_dz.energy', 'wb97x_dz.forces', 'wb97x_dz.hirshfeld_charges', 
                   'wb97x_dz.quadrupole', 'wb97x_tz.dipole', 'wb97x_tz.energy', 'wb97x_tz.forces',
                   'wb97x_tz.mbis_charges', 'wb97x_tz.mbis_dipoles', 'wb97x_tz.mbis_octupoles',
-                  'wb97x_tz.mbis_quadrupoles', 'wb97x_tz.mbis_volumes','distance']
-    
-    
-    def __init__(self, criterion=[], conformation='random', **kwargs):
-        self.criterion = criterion
-        self.conformation = conformation
-        super().__init__(**kwargs)        
-        
-    def __getitem__(self, i):
-        ci = self._get_conformation_index(self.ds[i])
-        datadic = {}
-        for input_key in self.input_dict:
-            datadic[input_key] = {}
-            for output_key in self.input_dict[input_key]:
-                out = self._get_features(self.ds[i], self.input_dict[input_key][output_key], ci)     
-                datadic[input_key][output_key] = out
-
-        if not self.dict2data:
-            return datadic
-        else:
-            _datadic = datadic['model_input']
-            _datadic.update(datadic['criterion_input'])
-            return Data.from_dict(_datadic)
+                  'wb97x_tz.mbis_quadrupoles', 'wb97x_tz.mbis_volumes','distance'] 
         
     def _get_features(self, datadic, features, ci):
         output = []
@@ -606,43 +604,25 @@ class ANI1x(CDataset, Molecule):
         if len(output) == 1: return output[0]
         else: return np.concatenate(output)
         
-    def _get_conformation_index(self, datadic):
-        """each molecular formula (mol) may have many different isomers
-        select the conformation based on some criterion (attribute value)
-        """
-        if len(self.criterion) == 0:
-            self.criterion = list(self.targets[0])
-        
-        ci = 0        
-        if isinstance(self.conformation, int):
-            ci = self.conformation
-        elif self.conformation == 'random':
-            ci = random.randrange(datadic[self.criterion[0]].shape[0])
-        elif self.conformation == 'max':
-            ci = np.argmax(datadic[self.criterion[0]], axis=0)
-        elif self.conformation == 'min':
-            ci = np.argmin(datadic[self.criterion[0]], axis=0)
-            
-        return ci
-    
-    def _load_features(self, mol, features, dtype='float32'):
+    def _load_features(self, mol, dtype='float32'):
         datadic = {}
         nan = False #ragged dataset, throws out molecule if it has nan values
         while not nan:
-            for f in features:
-                if f == 'distance': 
-                    out = mol['coordinates'][()]
-                    f = 'coordinates'
-                elif f == 'coulomb': #load the inputs for creating the coulomb
-                    for q in ['atomic_numbers','coordinates']:
-                        out = mol[q][()]
-                        if np.isnan(out).any(): nan = True
-                        datadic[q] = out.astype(dtype)
-                else: 
-                    out = mol[f][()]
-                    
-                if np.isnan(out).any(): nan = True
-                datadic[f] = out.astype(dtype)
+            for input_key, features in self.input_dict.items():
+                for f in features:
+                    if f == 'distance': 
+                        out = mol['coordinates'][()]
+                        f = 'coordinates'
+                    elif f == 'coulomb': #load the inputs for creating the coulomb
+                        for q in ['atomic_numbers','coordinates']:
+                            out = mol[q][()]
+                            if np.isnan(out).any(): nan = True
+                            datadic[q] = out.astype(dtype)
+                    else: 
+                        out = mol[f][()]
+                        
+                    if np.isnan(out).any(): nan = True
+                    datadic[f] = out.astype(dtype)
                 
             return datadic, nan #returns datadic, nan=False
         return datadic, nan #breaks out returns datadic, nan=True
@@ -665,9 +645,7 @@ class ANI1x(CDataset, Molecule):
         datadic = {}
         with h5py.File(in_file, 'r') as f:
             for mol in f.keys():
-                features, nan = self._load_features(f[mol], 
-                                                   self.input_dict['model_input']['X']+\
-                                                   self.input_dict['criterion_input']['target'])
+                features, nan = self._load_features(f[mol])
                 if nan:
                     continue
                 else:
@@ -679,7 +657,7 @@ class ANI1x(CDataset, Molecule):
         return datadic    
 
                 
-class QM7X(CDataset, Molecule):
+class QM7X(QDataset, Molecule):
     """QM7-X: A comprehensive dataset of quantum-mechanical properties spanning 
     the chemical space of small organic molecules
     https://arxiv.org/abs/2006.15139
@@ -791,32 +769,6 @@ class QM7X(CDataset, Molecule):
                   'hDIP','hRAT','hVDIP','hVOL','mC6','mPOL','mTPOL','pbe0FOR', 
                   'sMIT','sRMSD','totFOR','vDIP','vEQ','vIQ','vTQ','vdwFOR','vdwR',
                   'distance','coulomb']
-        
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        
-    def __getitem__(self, i):         
-        """this func feeds the model's forward().  
-        the structure of the input_dict determines the structure of the output datadict
-        keywords = 'criterion_input','embed','model_input'
-        """
-        #if multiple conformations one is randomly selected
-        conformations = list(self.ds[i].keys())
-        idconf = random.choice(conformations)
-        datadic = {}
-
-        for input_key in self.input_dict:
-            datadic[input_key] = {}
-            for output_key in self.input_dict[input_key]:
-                out = self._get_features(self.ds[i][idconf], self.input_dict[input_key][output_key])
-                datadic[input_key][output_key] = out
-                
-        if not self.dict2data:
-            return datadic
-        else:
-            _datadic = datadic['model_input']
-            _datadic.update(datadic['criterion_input'])
-            return Data.from_dict(_datadic)
     
     def _load_features(self, mol, dtype='float32'):
         datadic = {}
@@ -966,7 +918,7 @@ class PGDS(CDataset):
     """A wrapper for the PyG datasets
     https://pytorch-geometric.readthedocs.io/en/latest/modules/datasets.html
     dataset = pyg dataset name str
-    pg_params = pyg dataset parameters dict
+    pg_param = pyg dataset parameters dict
     input_dict = True use CDataset __getitem__ and input_dict and return dict
                  False use pyg __getitem__ and return pyg Data object
     """
@@ -974,8 +926,8 @@ class PGDS(CDataset):
         print('creating pytorch geometric {} dataset...'.format(kwargs['dataset']))
         super().__init__(**kwargs)
         
-    def load_data(self, dataset, pg_params):
-        ds = getattr(pgds, dataset)(**pg_params)
+    def load_data(self, dataset, pg_param):
+        ds = getattr(pgds, dataset)(**pg_param)
         self.ds_idx = list(range(len(ds)))
         return ds
                 
