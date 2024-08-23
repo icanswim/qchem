@@ -431,7 +431,7 @@ class QM9(QDataset):
                 data.append(line)
             return data
         
-    def load_data(self, in_dir='./data/qm9/qm9.xyz/', n=133885, filter_on=None, 
+    def load_data(self, in_dir='./data/qm9/dsgdb9nsd.xyz/', n=133885, filter_on=None, 
                   use_pickle=False, dtype='float32', n_conformers=0, dict2data=False):
 
         self.n_conformers = n_conformers
