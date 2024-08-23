@@ -20,8 +20,8 @@ from model import EncoderLoss
 
 class Metrics():
 
-    def __init__(self, report_interval=60, sk_metric_name=None, 
-                     log_plot=False, min_lr=.00125, sk_params={}):
+    def __init__(self, report_interval=10, sk_metric_name=None, 
+                     log_plot=False, min_lr=.00125, sk_param={}):
         
         self.start = datetime.now()
         self.report_time = self.start
@@ -32,9 +32,9 @@ class Metrics():
         self.epoch, self.e_loss, self.predictions = 0, [], []
         self.train_loss, self.val_loss, self.lr_log = [], [], []
         
-        self.sk_metric_name, self.sk_params = sk_metric_name, sk_params
+        self.sk_metric_name, self.sk_param = sk_metric_name, sk_param
         self.skm, self.sk_train_log, self.sk_val_log = None, [], []
-        self.sk_y, self.last_y, self.sk_pred, self.last_pred = [], [], [], []
+        self.y, self.last_y, self.y_pred, self.last_y_pred = [], [], [], []
         if self.sk_metric_name is not None:
             self.skm = getattr(metrics, self.sk_metric_name)
             
@@ -47,7 +47,7 @@ class Metrics():
         self.predictions.to_csv('./logs/{}_inference.csv'.format(self.start), index=True)
         print('inference {} complete and saved to csv...'.format(self.start))
 
-    def sk_metric(self, flag):
+    def metric(self, flag):
         """TODO multiple sk metrics"""
     
         def softmax(x): return np.exp(x)/sum(np.exp(x))
@@ -56,25 +56,25 @@ class Metrics():
             x_max = x.max()
             normalized = np.exp(x - x_max)
             return normalized / normalized.sum()
-        
-        y = np.concatenate(self.sk_y)
-        y_pred = np.concatenate(self.sk_pred)
 
-        if self.sk_metric_name == 'roc_auc_score' and y_pred.ndim == 2:
-            y_pred = np.apply_along_axis(softmax, 1, y_pred)
+        y = np.concatenate(self.y)
+        y_pred = np.concatenate(self.y_pred)
         
-        if self.sk_metric_name == 'accuracy_score' and y_pred.ndim == 2:
-            y_pred = np.argmax(y_pred, axis=1)
-
         if self.sk_metric_name is not None:
-            score = self.skm(y, y_pred, **self.sk_params)
+            if self.sk_metric_name == 'roc_auc_score' and y_pred.ndim == 2:
+                y_pred = np.apply_along_axis(softmax_overflow, 1, y_pred)
+            
+            if self.sk_metric_name == 'accuracy_score' and y_pred.ndim == 2:
+                y_pred = np.argmax(y_pred, axis=1)
+
+            score = self.skm(y, y_pred, **self.sk_param)
             if flag == 'train':
                 self.sk_train_log.append(score)
             else:
                 self.sk_val_log.append(score)
 
-        self.last_y, self.last_pred = y[-5:], y_pred[-5:]
-        self.sk_y, self.sk_pred = [], []
+        self.last_y, self.last_y_pred = np.squeeze(y[-5:]), np.squeeze(y_pred[-5:])
+        self.y, self.y_pred = [], []
         
     def loss(self, flag, loss):
         if flag == 'train':
@@ -96,27 +96,26 @@ class Metrics():
             print('epoch: {}, lr: {}'.format(self.epoch, self.lr_log[-1]))
             print('train loss: {}, val loss: {}'.format(self.train_loss[-1], self.val_loss[-1]))
             print('last 5 targets: \n{}'.format(self.last_y))
-            print('last 5 predictions: \n{}'.format(self.last_pred))
+            print('last 5 predictions: \n{}'.format(self.last_y_pred))
             if self.skm is not None:
                 print('sklearn train metric: {}, sklearn validation metric: {}'.format(
-                                                        self.sk_train_log[-1], self.sk_val_log[-1]))
+                                                    self.sk_train_log[-1], self.sk_val_log[-1]))
             self.report_time = datetime.now()
         
         if now:
             print_report()
         else:
             elapsed = datetime.now() - self.report_time
-            if elapsed.total_seconds() > self.report_interval or self.epoch==1:
+            if elapsed.total_seconds() > self.report_interval or self.epoch % 10 == 0:
                 print_report()
         
-        
-    def report(self):
+    def final_report(self):
         elapsed = datetime.now() - self.start
         print('\n...........................')
         self.log('learning time: {} \n'.format(elapsed))
         print('learning time: {}'.format(elapsed))
         print('last 5 targets: \n{}'.format(self.last_y))
-        print('last 5 predictions: \n{}'.format(self.last_pred))
+        print('last 5 predictions: \n{}'.format(self.last_y_pred))
         
         if self.skm is not None:
             self.log('sklearn test metric: \n{} \n'.format(self.sk_val_log[-1]))
@@ -230,8 +229,8 @@ class Learn():
     def __init__(self, Datasets, Model, Sampler=Selector, Metrics=Metrics,
                  DataLoader=DataLoader,
                  Optimizer=None, Scheduler=None, Criterion=None, 
-                 ds_params={}, model_params={}, sample_params={},
-                 opt_params={}, sched_params={}, crit_params={}, metrics_params={}, 
+                 ds_param={}, model_param={}, sample_param={},
+                 opt_param={}, sched_param={}, crit_param={}, metrics_param={}, 
                  adapt=None, load_model=None, load_embed=None, save_model=False,
                  batch_size=10, epochs=1, squeeze_y_pred=False, gpu=True, target='y'):
         
@@ -239,34 +238,34 @@ class Learn():
         self.bs = batch_size
         self.squeeze_y_pred = squeeze_y_pred
         self.target = target
-        self.ds_params = ds_params
-        self.dataset_manager(Datasets, Sampler, ds_params, sample_params)
+        self.ds_param = ds_param
+        self.dataset_manager(Datasets, Sampler, ds_param, sample_param)
         self.DataLoader = DataLoader
         
-        self.metrics = Metrics(**metrics_params)
-        self.metrics.log('model: {}\n{}'.format(Model, model_params))
-        self.metrics.log('dataset: {}\n{}'.format(Datasets, ds_params))
-        self.metrics.log('sampler: {}\n{}'.format(Sampler, sample_params))
+        self.metrics = Metrics(**metrics_param)
+        self.metrics.log('model: {}\n{}'.format(Model, model_param))
+        self.metrics.log('dataset: {}\n{}'.format(Datasets, ds_param))
+        self.metrics.log('sampler: {}\n{}'.format(Sampler, sample_param))
         self.metrics.log('epochs: {}, batch_size: {}, save_model: {}, load_model: {}'.format(
                                                     epochs, batch_size, save_model, load_model))
 
-        if not gpu: model_params['device'] = 'cpu'
+        if not gpu: model_param['device'] = 'cpu'
         
         if load_model is not None:
             try: 
-                model = Model(model_params)
+                model = Model(model_param)
                 model.load_state_dict(load('./models/'+load_model))
                 print('model loaded from state_dict...')
             except:
                 model = load('./models/'+load_model)
                 print('model loaded from pickle...')                                                      
         else:
-            model = Model(model_params)
+            model = Model(model_param)
         
         if load_embed is not None:
             for i, embedding in enumerate(model.embeddings):
                 weight = np.load('./models/{}_{}_embedding_weight.npy'.format(load_embed, i))
-                embedding.from_pretrained(from_numpy(weight), freeze=model_params['embed_params'][i][4])
+                embedding.from_pretrained(from_numpy(weight), freeze=model_param['embed_param'][i][4])
             print('loading embedding weights...')
           
         if adapt is not None: model.adapt(*adapt)
@@ -286,7 +285,7 @@ class Learn():
         self.metrics.log(self.model.children)
         
         if Criterion is not None:
-            self.criterion = Criterion(**crit_params)
+            self.criterion = Criterion(**crit_param)
             if self.gpu: 
                 if isinstance(self.criterion, EncoderLoss):
                     self.criterion.decoder.to('cuda:0')
@@ -294,11 +293,11 @@ class Learn():
                         self.criterion.discriminator.to('cuda:0')
                 else: 
                     self.criterion.to('cuda:0')
-            self.metrics.log('criterion: {}\n{}'.format(self.criterion, crit_params))
-            self.opt = Optimizer(self.model.parameters(), **opt_params)
-            self.metrics.log('optimizer: {}\n{}'.format(self.opt, opt_params))
-            self.scheduler = Scheduler(self.opt, **sched_params)
-            self.metrics.log('scheduler: {}\n{}'.format(self.scheduler, sched_params))
+            self.metrics.log('criterion: {}\n{}'.format(self.criterion, crit_param))
+            self.opt = Optimizer(self.model.parameters(), **opt_param)
+            self.metrics.log('optimizer: {}\n{}'.format(self.opt, opt_param))
+            self.scheduler = Scheduler(self.opt, **sched_param)
+            self.metrics.log('scheduler: {}\n{}'.format(self.scheduler, sched_param))
             
             for e in range(epochs): 
                 self.metrics.epoch = e
@@ -314,24 +313,26 @@ class Learn():
             with no_grad():
                 self.run('test')
                 
-            self.metrics.report()  
+            self.metrics.final_report()  
             
         else: #no Criterion implies inference mode
             with no_grad():
                 self.run('infer')
         
         if save_model:
+            if type(save_model) == str:
+                model_name = save_model
+            else:
+                model_name = self.metrics.start.strftime("%Y%m%d_%H%M")
             if adapt: 
-                save(self.model, './models/{}.pth'.format(
-                            self.metrics.start.strftime("%Y%m%d_%H%M")))
+                save(self.model, './models/{}.pth'.format(model_name))
             else: 
-                save(self.model.state_dict(), './models/{}.pth'.format(
-                            self.metrics.start.strftime("%Y%m%d_%H%M")))
+                save(self.model.state_dict(), './models/{}.pth'.format(model_name))
+                     
             if hasattr(self.model, 'embeddings'):
                 for i, embedding in enumerate(self.model.embeddings):
                     weight = embedding.weight.detach().cpu().numpy()
-                    np.save('./models/{}_{}_embedding_weight.npy'.format(
-                        self.metrics.start.strftime("%Y%m%d_%H%M"), i), weight)
+                    np.save('./models/{}_{}_embedding_weight.npy'.format(model_name, i), weight)
         
     def run(self, flag): 
         e_loss, e_sk, i = 0, 0, 0
@@ -355,50 +356,43 @@ class Learn():
             dataset = self.test_ds
             drop_last = False
 
-        nonblocking = True
         dataloader = self.DataLoader(dataset, batch_size=self.bs, 
                                      sampler=self.sampler(flag=flag), 
-                                     num_workers=8, pin_memory=False, 
+                                     num_workers=0, pin_memory=True, 
                                      drop_last=drop_last)
        
         for data in dataloader:
             i += self.bs
-            if self.gpu: 
-                if type(data) == dict: #if datadict overwrite with a new copy on the gpu
-                    _data = {'model_input': {},
-                             'criterion_input': {}}
-                    for d in data:
-                        for j in data[d]:
-                            #if input is a list of lists of embedding indices
-                            if type(data[d][j]) == list: 
-                                datalists = []
-                                for k in data[d][j]:
-                                    datalists.append(k[0].to('cuda:0', non_blocking=nonblocking))
-                                _data[d][j] = datalists
-                            else:
-                                _data[d][j] = data[d][j].to('cuda:0', non_blocking=nonblocking)
+            if self.gpu: # overwrite the datadic with a new copy on the gpu
+                if type(data) == dict: 
+                    _data = {}
+                    for k, v in data.items():
+                        _data[k] = data[k].to('cuda:0', non_blocking=True)
                     data = _data
-                    y_pred = self.model(data['model_input'])
-                else: #if data class object
-                    data = data.to('cuda:0', non_blocking=nonblocking)
-                    y_pred = self.model(data)
-                if self.squeeze_y_pred: y_pred = squeeze(y_pred)
+                else: 
+                    data = data.to('cuda:0', non_blocking=True)
+            y_pred = self.model(data)
+     
+            if self.squeeze_y_pred: y_pred = squeeze(y_pred)
                 
             if flag == 'infer':
                 self.metrics.predictions.append(y_pred.detach().cpu().numpy())
             else:
                 if type(data) == dict:
-                    y = data['criterion_input']['target']
+                    y = data[self.target]
                 else: 
                     y = getattr(data, self.target)
                 self.opt.zero_grad()
+                #variation from Cosmo
                 if isinstance(self.criterion, EncoderLoss):
                     b_loss, y_pred, y = self.criterion(*y_pred, data, flag)
                 else:
                     b_loss = self.criterion(y_pred, y)
                 e_loss += b_loss.item()
-                self.metrics.sk_y.append(y.detach().cpu().numpy())
-                self.metrics.sk_pred.append(y_pred.detach().cpu().numpy())
+                
+                self.metrics.y.append(y.detach().cpu().numpy())
+                self.metrics.y_pred.append(y_pred.detach().cpu().numpy())
+                
                 if flag == 'train':
                     b_loss.backward()
                     self.opt.step()
@@ -407,35 +401,36 @@ class Learn():
             self.metrics.infer()
         else:
             self.metrics.loss(flag, e_loss/i)
-            self.metrics.sk_metric(flag)
+            self.metrics.metric(flag)
             
         if flag == 'val': 
             self.scheduler.step(e_loss/i)
             self.metrics.lr_log.append(self.opt.param_groups[0]['lr'])
             self.metrics.status_report()
             
-    def dataset_manager(self, Datasets, Sampler, ds_params, sample_params):
+    def dataset_manager(self, Datasets, Sampler, ds_param, sample_param):
     
         if len(Datasets) == 1:
-            self.train_ds = Datasets[0](**ds_params['train_params'])
+            self.train_ds = Datasets[0](**ds_param['train_param'])
             self.val_ds = self.test_ds = self.train_ds
             self.sampler = Sampler(dataset_idx=self.train_ds.ds_idx, 
-                                   **sample_params)
+                                   **sample_param)
         if len(Datasets) == 2:
-            self.train_ds = Datasets[0](**ds_params['train_params'])
+            self.train_ds = Datasets[0](**ds_param['train_param'])
             self.val_ds = self.train_ds
-            self.test_ds = Datasets[1](**ds_params['test_params'])
+            self.test_ds = Datasets[1](**ds_param['test_param'])
             self.sampler = Sampler(train_idx=self.train_ds.ds_idx, 
                                    test_idx=self.test_ds.ds_idx,
-                                   **sample_params)
+                                   **sample_param)
         if len(Datasets) == 3:
-            self.train_ds = Datasets[0](**ds_params['train_params'])
-            self.val_ds = Datasets[1](**ds_params['val_params'])
-            self.test_ds = Datasets[2](**ds_params['test_params'])
+            self.train_ds = Datasets[0](**ds_param['train_param'])
+            self.val_ds = Datasets[1](**ds_param['val_param'])
+            self.test_ds = Datasets[2](**ds_param['test_param'])
             self.sampler = Sampler(train_idx=self.train_ds.ds_idx, 
                                    val_idx=self.val_ds.ds_idx, 
                                    test_idx=self.test_ds.ds_idx,
-                                   **sample_params)
+                                   **sample_param)
+
 
 
         

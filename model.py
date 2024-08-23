@@ -25,7 +25,7 @@ class PygModel(nn.Module):
     depth = int (num of conv layers)
     pool = 'None'/'global_mean'
     softmax = True/False
-    pyg_params = {'in_channels': int,
+    pyg_param = {'in_channels': int,
                   'hidden_channels': int,
                   'num_layers': int,
                   'out_channels': int,
@@ -33,27 +33,27 @@ class PygModel(nn.Module):
                   'norm': None}
     """
     
-    def __init__(self, model_params):
+    def __init__(self, model_param):
         super().__init__()
 
-        launcher = getattr(pygmodels, model_params['model_name'])
-        self.model = launcher(**model_params['pyg_params'])
+        launcher = getattr(pygmodels, model_param['model_name'])
+        self.model = launcher(**model_param['pyg_param'])
         
-        pool = model_params['pool']
+        pool = model_param['pool']
         if pool is not None:
             self.pool = getattr(aggr, pool)()
         else:
             self.pool = None
         
-        self.ffnet = model_params['ffnet']
+        self.ffnet = model_param['ffnet']
         if self.ffnet:
-            self.ffn = FFNet({'in_channels': model_params['in_channels'], 
-                              'hidden': model_params['hidden'],
-                              'out_channels': model_params['out_channels']})
+            self.ffn = FFNet({'in_channels': model_param['in_channels'], 
+                              'hidden': model_param['hidden'],
+                              'out_channels': model_param['out_channels']})
             
-        self.softmax = model_params['softmax']
+        self.softmax = model_param['softmax']
         
-        print('pytorch geometric model {} loaded...'.format(model_params['model_name']))
+        print('pytorch geometric model {} loaded...'.format(model_param['model_name']))
         
     def forward(self, data):
 
@@ -98,7 +98,6 @@ class GraphNet(CModel):
     softmax = True/False
     activation = F.activation
     """
-
     def build(self, in_channels=0, hidden=0, out_channels=0, depth=0, 
               convolution='SAGEConv', pool='MeanAggregation', dropout=.1, 
               softmax=None, activation='relu', **kwargs):
@@ -132,10 +131,9 @@ class GraphNet(CModel):
                             'out_channels':out_channels, 'softmax':softmax})
         
         print('GraphNet {} loaded...'.format(conv))
-                               
+                            
     def forward(self, data):
         x = data.x
-        
         
         for i, l in enumerate(self.layers):
             
@@ -156,8 +154,7 @@ class GraphNet(CModel):
         x = self.ffnet(x)
              
         return x
-    
-
+        
 class GraphNetVariationalEncoder(CModel):
     
     def build(self, in_channels, hidden, out_channels, depth, 
@@ -197,13 +194,13 @@ class EncoderLoss():
         standard normal distribution prior
     """
     
-    def __init__(self, Decoder=pygmodels.InnerProductDecoder, decoder_params={},
-                       adversarial=False, disc_params={}):
+    def __init__(self, Decoder=pygmodels.InnerProductDecoder, decoder_param={},
+                       adversarial=False, disc_param={}):
     
-        self.decoder = Decoder(**decoder_params)
+        self.decoder = Decoder(**decoder_param)
         self.adversarial = adversarial
         if self.adversarial:
-            self.discriminator = FFNet(disc_params)
+            self.discriminator = FFNet(disc_param)
             self.disc_optimizer = Adam(self.discriminator.parameters(), lr=.05)
             
     def __call__(self, z, mu, logstd, data, flag):
