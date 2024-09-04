@@ -769,7 +769,17 @@ class QM7X(QDataset, Molecule):
                   'hDIP','hRAT','hVDIP','hVOL','mC6','mPOL','mTPOL','pbe0FOR', 
                   'sMIT','sRMSD','totFOR','vDIP','vEQ','vIQ','vTQ','vdwFOR','vdwR',
                   'distance','coulomb']
-    
+
+    def __getitem__(self, i):         
+        #if multiple conformations one is randomly selected
+        conformations = list(self.ds[i].keys())
+        idconf = random.choice(conformations)
+        datadic = {}
+
+        for input_key, features in self.input_dict.items():
+            datadic[input_key] = self._get_features(self.ds[i][idconf], features)
+        return datadic
+
     def _load_features(self, mol, dtype='float32'):
         datadic = {}
         for p in QM7X.properties:
