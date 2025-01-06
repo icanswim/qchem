@@ -417,9 +417,8 @@ class QM9(QDataset):
                     out = T(out)
                     
             output.append(out)
-
         
-        cat_dim = output[0].ndim -1 
+        cat_dim = output[0].ndim -1
         if len(output) == 1: return output[0] 
         elif is_tensor(output[0]): return torch_cat(output, dim=cat_dim)
         else: return np.concatenate(output, axis=cat_dim)

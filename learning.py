@@ -82,7 +82,7 @@ class Metrics():
             y_pred = np.argmax(y_pred, axis=1)
             self.display_y_pred = y_pred
         else:
-            self.display_y_pred = y_pred
+            self.display_y_pred = y_pred[-5:]
 
         if flag == 'infer':
             self.predictions.append(y_pred)
