@@ -9,165 +9,201 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-from torch import no_grad, save, load, from_numpy, squeeze
+from torch import no_grad, save, load, from_numpy, cat, as_tensor, compile, permute, arange, int64
 from torch.utils.data import Sampler, DataLoader
+from torch.nn import functional as F
+
+from torcheval.metrics import functional as t_metrics
 
 from sklearn import metrics as sk_metrics
 
 
 class Metrics():
+    """
+    """
     def __init__(self, report_interval=10, metric_name=None, 
                      log_plot=False, min_lr=.00125, metric_param={}):
         
-        self.start = datetime.now()
-        self.report_time = self.start
+        now = datetime.now()
+        self.start = now
+        self.report_time = now
         self.report_interval = report_interval
         self.log_plot = log_plot
         self.min_lr = min_lr
         
-        self.epoch, self.e_loss, self.predictions, self.lr_log = 0, [], [], []
+        self.epoch, self.e_loss, self.n = 0, 0, 0
         self.train_loss, self.val_loss, self.test_loss = [], [], []
+        self.predictions, self.lr_log = [], []
         
         self.metric_name, self.metric_param = metric_name, metric_param
         self.metric_func, self.metric_train_log, self.metric_val_log = None, [], []
-        self.y, self.y_pred, = [], []
+        self.y, self.y_pred = [], []
         
         if self.metric_name is not None:
-            if self.metric_name == 'transformer':
+            if self.metric_name in ['transformer']:
                 self.metric_func = None
-            else:
+            elif self.metric_name in ['accuracy_score','roc_auc_score']:
                 self.metric_func = getattr(sk_metrics, self.metric_name)
-            
+            elif self.metric_name in ['auc','multiclass_accuracy','multiclass_auprc']:
+                self.metric_func = getattr(t_metrics, self.metric_name)
+            else:
+                raise Exception('hey just what you see pal...')
+                
         logging.basicConfig(filename='./logs/cosmosis.log', level=20)
+        self.log('\n.....................\n')
         self.log('\nNew Experiment: {}'.format(self.start))
     
     def infer(self):
+        """
+        process the predictions and save
+        """
+        now = datetime.now()
+        print('\n.....................\n')
+        self.log('\n.....................\n')
+        self.log('\ninference job: {} \n'.format(self.start))
+        self.log('\ntotal learning time: {} \n'.format(now - self.start))
+        print('total learning time: {}'.format(now - self.start))
         
-        if self.metric_name != 'transformer':
-            self.predictions = np.concatenate(self.predictions).squeeze()
+        if self.metric_name == 'transformer':
+            predictions = F.softmax(self.predictions[-1].squeeze(), dim=-1)
+            predictions = predictions.argmax(dim=-1)
+            predictions = predictions.detach().cpu().numpy().tolist()
+            predictions = self.decoder(predictions)
+            predictions = np.asarray(predictions).reshape((1,-1))
+            print('predictions: ', predictions)
+        else:
+            predictions = self.predictions.detach().cpu().numpy()
+            print('predictions[-1]: ', predictions[-1])
+            print('predictions.shape: ', predictions.shape)
+            
+        pd.DataFrame(predictions).to_csv(
+                    './logs/{}_inference.csv'.format(now), index=True)
+        print('inference instance {} complete and saved to csv...'.format(now))
+        self.log('\ninference instance {} saved to csv...'.format(now))
+        self.predictions = []
         
-        pd.DataFrame(self.predictions).to_csv(
-                        './logs/{}_inference.csv'.format(self.start), index=True)
-        print('inference {} complete and saved to csv...'.format(self.start))
-
+    def softmax_overflow(x):
+        x_max = x.max(axis=1, keepdims=True)
+        normalized = np.exp(x - x_max)
+        return normalized / normalized.sum(axis=1, keepdims=True)
+        
     def metric(self, flag):
-        """TODO multiple metric"""
-        self.flag = flag 
-        self.display_y, self.display_y_pred = [], []
-        
-        def softmax(x): return np.exp(x)/sum(np.exp(x))
-
-        def softmax_overflow(x):
-            x_max = x.max()
-            normalized = np.exp(x - x_max)
-            return normalized / normalized.sum()
-            
-        y_pred = self.y_pred
-        
-        if self.metric_name == 'transformer':
-            y_pred = y_pred[-1]
-            if y_pred.ndim == 3: y_pred = y_pred[-1]
-            y_pred = np.apply_along_axis(softmax_overflow, 0, np.squeeze(y_pred))
-            y_pred = np.apply_along_axis(np.argmax, 0, y_pred).squeeze().flatten().tolist()
-            y_pred = self.decoder(y_pred)
-            self.display_y_pred = y_pred
-        else:
-            y_pred = np.concatenate(y_pred)
-            
-        if self.metric_name in ['roc_auc_score']:
-            y_pred = np.apply_along_axis(softmax_overflow, 1, y_pred)
-            self.display_y_pred = y_pred
-            
-        elif self.metric_name in ['accuracy_score']:
-            y_pred = np.argmax(y_pred, axis=1)
-            self.display_y_pred = y_pred
-        else:
-            self.display_y_pred = y_pred[-5:]
-
-        if flag == 'infer':
-            self.predictions.append(y_pred)
+        """
+        called at the end of each run() loop
+        TODO multiple metric
+        flags = train, val, test, infer
+        """
+        if self.metric_func == None:
             return
+            
+        y_pred = cat(self.y_pred, dim=0)
+        y = cat(self.y, dim=0)
+        
+        if self.metric_name in ['roc_auc_score','auc','accuracy_score',
+                                    'multiclass_accuracy','multiclass_auprc']:
+            y_pred = F.softmax(y_pred, dim=-1)
 
-        y = self.y
-        
-        if self.metric_name == 'transformer':
-            y = y[-1]
-            if y.ndim == 2: y = y[-1]
-            y = y.squeeze().flatten().tolist() 
-            self.display_y = self.decoder(y)
-        else:
-            y = np.concatenate(self.y)
-            self.display_y = y[-5:]
-        
-        if self.metric_func != None:
-            score = self.metric_func(y, y_pred, **self.metric_param)
-            if flag == 'train':
-                self.metric_train_log.append(score)
-            else:
-                self.metric_val_log.append(score)
+        if self.metric_name in ['accuracy_score','auc','multiclass_accuracy']:
+            y_pred = y_pred.argmax(dim=-1)
 
-    def flush(self):
-        self.y, self.y_pred = [], []
+        # sklearn metrics
+        if self.metric_name in ['accuracy_score','roc_auc_score']:
+            y_pred = y_pred.detach().cpu().numpy()
+            y = y.detach().cpu().numpy()
+
+        score = self.metric_func(y_pred, y, **self.metric_param) 
+        score = score.item()
         
-    def loss(self, flag, loss=None):
         if flag == 'train':
-            self.train_loss.append(loss)
-        if flag == 'val':
-            self.val_loss.append(loss)
-        if flag == 'test':
-            self.test_loss.append(loss)
-        if flag == 'infer':
-            return
+            self.metric_train_log.append(score)
+        else:
+            self.metric_val_log.append(score)
         
     def log(self, message):
         logging.info(message)
         
-    def status_report(self, now=False):
-        
-        def print_report():
-            print('\n...........................')
-            print('learning time: {}'.format(datetime.now()-self.start))
-            print('epoch: {}, lr: {}'.format(self.epoch, self.lr_log[-1]))
-            print('train loss: {}, val loss: {}\n'.format(self.train_loss[-1], self.val_loss[-1]))
-            print('last targets: \n{}\n'.format(self.display_y))
-            print('last predictions: \n{}\n'.format(self.display_y_pred))
-            if len(self.metric_train_log) != 0:
-                print('{} train score: {}, validation score: {}'.format(
-                    self.metric_name, self.metric_train_log[-1], self.metric_val_log[-1]))
-            self.report_time = datetime.now()
-        
-        if now:
-            print_report()
-        else:
-            elapsed = datetime.now() - self.report_time
-            if elapsed.total_seconds() > self.report_interval or self.epoch % 10 == 0:
-                print_report()
-        
-    def final_report(self):
-        elapsed = datetime.now() - self.start
-        print('\n...........................')
-        self.log('learning time: {} \n'.format(elapsed))
-        print('learning time: {}'.format(elapsed))
-        print('last predictions: \n{}\n'.format(self.display_y_pred))
-
-        if self.flag != 'infer': 
-            print('last targets: \n{}'.format(self.display_y))
-            print('test loss: {} \n'.format(self.test_loss[-1]))
-            self.log('test loss: {} \n'.format(self.test_loss))
-        
-            if len(self.metric_train_log) != 0:
-                self.log('{} test metric: \n{} \n'.format(self.metric_name, self.metric_val_log[-1]))
-                print('{} test metric: \n{} \n'.format(self.metric_name, self.metric_val_log[-1]))
-                logs = zip(self.train_loss, self.val_loss, self.lr_log, self.metric_val_log)
-                cols = ['train_loss','validation_loss','learning_rate',self.metric_name]
-            else:
-                logs = zip(self.train_loss, self.val_loss, self.lr_log)
-                cols = ['train_loss','validation_loss','learning_rate']
+    def report(self, _y_pred, _y, flag):
+        """
+        called at the end of each run() loop
+        """
+        if flag == 'train': return
             
-            pd.DataFrame(logs, columns=cols).to_csv('./logs/'+self.start.strftime("%Y%m%d_%H%M"))
-            self.view_log('./logs/'+self.start.strftime('%Y%m%d_%H%M'), self.log_plot)
+        now = datetime.now()
+        elapsed = now - self.report_time
+        if elapsed.total_seconds() < self.report_interval: return
+            
+        tot_elapsed = now - self.start
+        print('\n.....................\n')
+        print('total elapsed time: {}'.format(tot_elapsed))
+        print('epoch: {}'.format(self.epoch))
+        self.report_time = now
+
+        if len(self.predictions) > 0: 
+            print('len(self.predictions): ', len(self.predictions))
+            return
+
+        # get the last instance
+        y_pred = _y_pred[-1]
+        y = _y[-1]
+        
+        if self.metric_name == 'transformer':
+            y_pred = F.softmax(y_pred, dim=-1)
+            y_pred = y_pred.argmax(dim=0)
+            y_pred = y_pred.detach().cpu().numpy().tolist()
+            y_pred = self.decoder(y_pred)
+            y = y.detach().cpu().numpy().tolist()
+            y = self.decoder(y)
+            
+        print('y_pred: ', y_pred)
+        print('y: ', y)
+        print('train loss: {}, val loss: {}'.format(self.train_loss[-1], self.val_loss[-1]))
+        print('lr: {}'.format(self.lr_log[-1]))
+    
+        if len(self.metric_train_log) != 0:
+            print('{} train score: {}, validation score: {}'.format(
+                self.metric_name, self.metric_train_log[-1], self.metric_val_log[-1]))
+    
+    def loss(self, flag):
+        """
+        called at the end of each run() loop
+        """
+        if flag == 'train':
+            self.train_loss.append(self.e_loss/self.n)
+        if flag == 'val':
+            self.val_loss.append(self.e_loss/self.n)
+        if flag == 'test':
+            self.test_loss.append(self.e_loss/self.n)
+            
+    def reset_loop(self):
+        """
+        called at the end of each run() loop
+        """
+        self.n, self.e_loss = 0, 0
+        self.y, self.y_pred = [], []
+
+    def final(self):
+        now = datetime.now()
+        print('\n........final........\n')
+        self.log('\n........final........\n')
+        self.log('\ntotal learning time: {}'.format(now - self.start))
+        print('total learning time: {}'.format(now - self.start))
+        
+        if len(self.test_loss) != 0:
+            self.log('test loss: {}'.format(self.test_loss))
+            print('test loss: {}'.format(self.test_loss[-1]))
+            
+        if len(self.metric_train_log) != 0:
+            self.log('\n{} test metric: {}'.format(self.metric_name, self.metric_val_log[-1]))
+            print('{} test metric: {}'.format(self.metric_name, self.metric_val_log[-1]))
+            logs = zip(self.train_loss, self.val_loss, self.lr_log, self.metric_val_log)
+            cols = ['train_loss','validation_loss','learning_rate',self.metric_name]
         else:
-            self.infer()
+            logs = zip(self.train_loss, self.val_loss, self.lr_log)
+            cols = ['train_loss','validation_loss','learning_rate']
+        
+        pd.DataFrame(logs, columns=cols).to_csv('./logs/'+self.start.strftime("%Y%m%d_%H%M"))
+        self.view_log('./logs/'+self.start.strftime('%Y%m%d_%H%M'), self.log_plot)
+
         
     @classmethod    
     def view_log(cls, log_file, log_plot):
@@ -255,9 +291,6 @@ class Learn():
     
     load_embed = None/'model_name'
     
-    squeeze_y_pred = True/False (torch.squeeze(y_pred)) 
-        squeeze the model output
-        
     adapt = (D_in, D_out, dropout)
         prepends a trainable linear layer
 
@@ -275,14 +308,13 @@ class Learn():
                  Optimizer=None, Scheduler=None, Criterion=None, 
                  ds_param={}, model_param={}, sample_param={},
                  opt_param={}, sched_param={}, crit_param={}, metrics_param={}, 
-                 adapt=None, load_model=None, load_embed=None, save_model=False,
-                 batch_size=10, epochs=1,
-                 gpu=True, weights_only=False, squeeze_y_pred=False, target='y'):
+                 adapt=None, load_model=None, load_embed=True, save_model=False,
+                 batch_size=10, epochs=1, compile_model=False, 
+                 gpu=True, weights_only=False, target='y'):
 
         self.weights_only = weights_only
         self.gpu = gpu
         self.bs = batch_size
-        self.squeeze_y_pred = squeeze_y_pred
         self.target = target
         self.ds_param = ds_param
         self.dataset_manager(Datasets, Sampler, ds_param, sample_param)
@@ -292,11 +324,11 @@ class Learn():
         if hasattr(self.train_ds, 'encoding'):
             self.metrics.decoder = self.train_ds.encoding.decode
         
-        self.metrics.log('model: {}\n{}'.format(Model, model_param))
-        self.metrics.log('dataset: {}\n{}'.format(Datasets, ds_param))
-        self.metrics.log('sampler: {}\n{}'.format(Sampler, sample_param))
-        self.metrics.log('epochs: {}, batch_size: {}, save_model: {}, load_model: {}'.format(
-                                                    epochs, batch_size, save_model, load_model))
+        self.metrics.log('\nmodel: {}\n{}'.format(Model, model_param))
+        self.metrics.log('\ndataset: {}\n{}'.format(Datasets, ds_param))
+        self.metrics.log('\nsampler: {}\n{}'.format(Sampler, sample_param))
+        self.metrics.log('\nepochs: {}, batch_size: {}, save_model: {}, load_model: {}'.format(
+                                                        epochs, batch_size, save_model, load_model))
 
         if not gpu: model_param['device'] = 'cpu'
         
@@ -311,36 +343,43 @@ class Learn():
         else:
             model = Model(model_param)
         
-        if load_embed is not None:
-            for i, embedding in enumerate(model.embeddings):
-                weight = np.load('./models/{}_{}_embedding_weight.npy'.format(load_embed, i))
-                embedding.from_pretrained(from_numpy(weight), freeze=model_param['embed_param'][i][4])
-            print('loading embedding weights...')
-                    
+        if load_embed is True:
+            try:
+                for feature, embedding in model.embedding_layer.items():
+                    weight = np.load('./models/{}_{}_embedding_weight.npy'.format(load_model[:-4], feature))
+                    embedding.from_pretrained(from_numpy(weight), freeze=model_param['embed_param'][feature][3])
+                print('loading embedding weights...')
+            except:
+                print('embedding weights failed to load.  reinitializing...')
+                
         if adapt is not None: model.adapt(*adapt)
-        
+
         if self.gpu == True:
             try:
-                self.model = model.to('cuda:0')
+                model.to('cuda:0')
                 print('running model on gpu...')
             except:
                 print('gpu not available.  running model on cpu...')
-                self.model = model
                 self.gpu = False
         else:
             print('running model on cpu...')
-            self.model = model
+
+        if compile_model:
+            model = compile(model)
+            print('compiling model...')
             
-        self.metrics.log(self.model.children)
-        
+        self.model = model
+
+        self.metrics.log('\n{}'.format(self.model.children))
+        # primary loop 
         if Criterion is not None:
             self.criterion = Criterion(**crit_param)
             if self.gpu: self.criterion.to('cuda:0')
-            self.metrics.log('criterion: {}\n{}'.format(self.criterion, crit_param))
+            self.metrics.log('\ncriterion: {}\n{}'.format(self.criterion, crit_param))
             self.opt = Optimizer(self.model.parameters(), **opt_param)
-            self.metrics.log('optimizer: {}\n{}'.format(self.opt, opt_param))
+            self.metrics.log('\noptimizer: {}\n{}'.format(self.opt, opt_param))
             self.scheduler = Scheduler(self.opt, **sched_param)
-            self.metrics.log('scheduler: {}\n{}'.format(self.scheduler, sched_param))
+            self.metrics.log('\nscheduler: {}\n{}'.format(self.scheduler, sched_param))
             
             for e in range(epochs):
                 self.metrics.epoch = e
@@ -348,38 +387,43 @@ class Learn():
                 self.run('train')
                 with no_grad():
                     self.run('val')
-                    if e > 1 and  self.metrics.lr_log[-1] <= self.metrics.min_lr:
-                        self.metrics.status_report(now=True)
-                        print('\n early stopping!  learning rate is below the set minimum...')
+                    if e > 1 and self.metrics.lr_log[-1] <= self.metrics.min_lr:
+                        print('early stopping!  learning rate is below the set minimum...')
                         break
                 
             with no_grad():
                 self.run('test')
                 
-        else: #no Criterion implies inference mode
+            self.metrics.final()
+            
+        else: # no Criterion implies inference mode
             with no_grad():
-                for e in range(epochs):
+                for e in range(epochs): 
                     self.run('infer')
+                    self.metrics.infer()
                     
-        self.metrics.final_report() 
-        
         if save_model:
             if type(save_model) == str:
                 model_name = save_model
             else:
                 model_name = self.metrics.start.strftime("%Y%m%d_%H%M")
-            if adapt: 
+
+            if compile: 
+                save(model.state_dict(), './models/{}.pth'.format(model_name))
+            elif adapt: 
                 save(self.model, './models/{}.pth'.format(model_name))
             else: 
                 save(self.model.state_dict(), './models/{}.pth'.format(model_name))
                      
-            if hasattr(self.model, 'embeddings'):
-                for i, embedding in enumerate(self.model.embeddings):
+            if hasattr(self.model, 'embedding_layer'):
+                for feature, embedding in self.model.embedding_layer.items():
                     weight = embedding.weight.detach().cpu().numpy()
-                    np.save('./models/{}_{}_embedding_weight.npy'.format(model_name, i), weight)
+                    np.save('./models/{}_{}_embedding_weight.npy'.format(model_name, feature), weight)
+
+            print('model: {} saved...'.format(model_name))
+    
+    def run(self, flag): # secondary loop
         
-    def run(self, flag):
-        e_loss, i = 0, 0
         if flag == 'train': 
             self.model.training = True
             dataset = self.train_ds
@@ -399,14 +443,14 @@ class Learn():
             self.model.training = False
             dataset = self.test_ds
             drop_last = False
-        
+            self.model.generate = True
+            
         dataloader = self.DataLoader(dataset, batch_size=self.bs, 
                                      sampler=self.sampler(flag=flag), 
                                      num_workers=0, pin_memory=True, 
                                      drop_last=drop_last)
-       
+        # tertiary loop
         for data in dataloader:
-            i += self.bs
             if self.gpu: # overwrite the datadic with a new copy on the gpu
                 if type(data) == dict: 
                     _data = {}
@@ -415,38 +459,37 @@ class Learn():
                     data = _data
                 else: 
                     data = data.to('cuda:0', non_blocking=True)
-            y_pred = self.model(data)
-            if self.squeeze_y_pred: y_pred = squeeze(y_pred)
-                
+
+            y_pred = self.model(data)   
+            if self.metrics.metric_func is not None: self.metrics.y_pred.append(y_pred)
+            
             if flag != 'infer':
-                if type(data) == dict:
-                    y = data[self.target]
-                else: 
-                    y = getattr(data, self.target)
+                if type(data) == dict: y = data[self.target]
+                else: y = getattr(data, self.target)
+                    
+                if self.metrics.metric_func is not None: self.metrics.y.append(y)
                     
                 self.opt.zero_grad()
-                #TODO variable in/out for criterion
                 b_loss = self.criterion(y_pred, y)
-                e_loss += b_loss.item()
-                
+                self.metrics.e_loss += b_loss.item()
+                self.metrics.n += self.bs
+
                 if flag == 'train':
                     b_loss.backward()
                     self.opt.step()
-                    
-                self.metrics.y.append(y.detach().cpu().numpy())
-                
-            self.metrics.y_pred.append(y_pred.detach().cpu().numpy())
-            
-        if e_loss != 0: self.metrics.loss(flag, e_loss/i)
-        self.metrics.metric(flag)
-        
+            else:
+                self.metrics.predictions.append(y_pred)
+                y = None
+
         if flag == 'val': 
-            self.scheduler.step(e_loss)
+            self.scheduler.step(self.metrics.e_loss)
             self.metrics.lr_log.append(self.opt.param_groups[0]['lr'])
-            self.metrics.status_report()
             
-        self.metrics.flush()
-        
+        self.metrics.metric(flag)
+        self.metrics.loss(flag)
+        self.metrics.report(y_pred, y, flag)
+        self.metrics.reset_loop()
+                
     def dataset_manager(self, Datasets, Sampler, ds_param, sample_param):
         
         if len(Datasets) == 1:
