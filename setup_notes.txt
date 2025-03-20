@@ -9,6 +9,7 @@ mkdir logs
 mkdir models
 conda env create -f environment.yml
 conda activate qchem
+pip install torcheval
 jupyter lab
 
 ##manual creation of conda environment and folders
@@ -23,6 +24,7 @@ conda activate qchem
 conda config --add channels nvidia pytorch pyg conda-forge
 conda install pytorch torchvision torchaudio pytorch-cuda=12.1 rdkit pyg
 conda install matplotlib scipy pandas scikit-learn jupyterlab h5py git numpy
+pip install torcheval
 jupyter lab
 
 ##download the source data for the dataset class

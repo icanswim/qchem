@@ -98,12 +98,10 @@ class GraphNet(CModel):
     softmax = True/False
     activation = F.activation
     """
-    def build(self, in_channels=0, hidden=0, out_channels=0, depth=0, 
-              convolution='SAGEConv', pool='MeanAggregation', dropout=.1, 
-              softmax=None, activation='relu', **kwargs):
+    def build(self, in_channels=0, hidden=0, out_channels=0, depth=0, dropout=.1,
+              convolution='SAGEConv', pool='MeanAggregation', activation='relu', **kwargs):
         
         self.dropout = dropout
-        self.softmax = softmax
         self.convolution = convolution
         
         if activation is not None:
@@ -127,8 +125,7 @@ class GraphNet(CModel):
             layers.append(Conv(hidden, hidden, **kwargs))    
         self.layers = layers
         
-        self.ffnet = FFNet({'in_channels':hidden, 'hidden':hidden, 
-                            'out_channels':out_channels, 'softmax':softmax})
+        self.ffnet = FFNet({'in_channels':hidden, 'hidden':hidden, 'out_channels':out_channels})
         
         print('GraphNet {} loaded...'.format(conv))
                             
@@ -158,15 +155,12 @@ class GraphNet(CModel):
 class GraphNetVariationalEncoder(CModel):
     
     def build(self, in_channels, hidden, out_channels, depth, 
-                  convolution='GCNConv',pool=None, softmax=None, **kwargs):
+                      convolution='GCNConv', pool=None, **kwargs):
         
         self.gnet = GraphNet({'in_channels':in_channels, 'hidden':hidden, 'out_channels':hidden, 
-                              'convolution':convolution, 'depth':depth, 'pool':pool, 'softmax':softmax,
-                              **kwargs})
-        self.mu = FFNet({'in_channels':hidden, 'hidden':hidden, 
-                         'out_channels':out_channels, 'softmax':softmax})
-        self.logstd = FFNet({'in_channels':hidden, 'hidden':hidden, 
-                             'out_channels':out_channels, 'softmax':softmax})
+                              'convolution':convolution, 'depth':depth, 'pool':pool, **kwargs})
+        self.mu = FFNet({'in_channels':hidden, 'hidden':hidden, 'out_channels':out_channels})
+        self.logstd = FFNet({'in_channels':hidden, 'hidden':hidden, 'out_channels':out_channels})
         
         print('GraphNetVariationalEncoder loaded...')
 
@@ -201,10 +195,15 @@ class EncoderLoss():
         self.adversarial = adversarial
         if self.adversarial:
             self.discriminator = FFNet(disc_param)
-            self.disc_optimizer = Adam(self.discriminator.parameters(), lr=.05)
+            self.disc_optimizer = Adam(self.discriminator.parameters(), lr=.01)
             
     def __call__(self, z, mu, logstd, data, flag):
         return self.forward(z, mu, logstd, data, flag)
+
+    def to(self, device):
+        self.decoder.to(device)
+        if self.adversarial:
+            self.discriminator.to(device)
         
     def reg_loss(self, z):
         reg = sigmoid(self.discriminator(z))
@@ -223,26 +222,25 @@ class EncoderLoss():
         return real_loss + fake_loss
 
     def recon_loss(self, z, mu, logstd, data):
-                   
+     
         pos_edge_index = data.edge_index
         neg_edge_index = batched_negative_sampling(pos_edge_index, data.batch, 
                                                        method='dense', force_undirected=True)
         pos_pred = self.decoder(z, pos_edge_index, sigmoid=True)
         neg_pred = self.decoder(z, neg_edge_index, sigmoid=True)
         y_pred = cat([pos_pred, neg_pred], dim=0)
-
-        pos_loss = -log(pos_pred + 1e-15).mean()
-        neg_loss = -log(1 - neg_pred + 1e-15).mean()
-        recon_loss = pos_loss + neg_loss
-                   
-        def kl_loss():
-            return -0.5 * mean(sum(1 + 2 * logstd - mu**2 - logstd.exp()**2, dim=1))
-
-        loss = recon_loss + (1 / data.num_nodes) * kl_loss()
-
+        
         pos_y = z.new_ones(pos_edge_index.size(1))
         neg_y = z.new_zeros(neg_edge_index.size(1))
         y = cat([pos_y, neg_y], dim=0)
+        
+        pos_loss = -log(pos_pred + 1e-15).mean()
+        neg_loss = -log(1 - neg_pred + 1e-15).mean()
+        recon_loss = pos_loss + neg_loss
+        
+        kl_loss = F.kl_div(y_pred, y, reduction='batchmean', log_target=False)
+        
+        loss = recon_loss + kl_loss/data.num_nodes
 
         return loss, y_pred, y
                    
