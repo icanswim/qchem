@@ -12,6 +12,7 @@ from torch_geometric.nn import aggr, conv, NNConv, VGAE, GCNConv
 
 from torch_geometric.utils import batched_negative_sampling, negative_sampling
 
+from torch import isnan, log, abs
 
 class PygModel(nn.Module):
     """
@@ -165,10 +166,12 @@ class GraphNetVariationalEncoder(CModel):
         print('GraphNetVariationalEncoder loaded...')
 
     def forward(self, data):
+
         z = self.gnet(data)
         mu = self.mu(z)
         logstd = self.logstd(z)
-        
+        logstd = logstd.clamp(max=10)
+
         #reparametrize
         if self.training:
             z = mu + randn_like(logstd) * exp(logstd)
@@ -222,14 +225,15 @@ class EncoderLoss():
         return real_loss + fake_loss
 
     def recon_loss(self, z, mu, logstd, data):
-     
+
         pos_edge_index = data.edge_index
         neg_edge_index = batched_negative_sampling(pos_edge_index, data.batch, 
                                                        method='dense', force_undirected=True)
+
         pos_pred = self.decoder(z, pos_edge_index, sigmoid=True)
         neg_pred = self.decoder(z, neg_edge_index, sigmoid=True)
         y_pred = cat([pos_pred, neg_pred], dim=0)
-        
+
         pos_y = z.new_ones(pos_edge_index.size(1))
         neg_y = z.new_zeros(neg_edge_index.size(1))
         y = cat([pos_y, neg_y], dim=0)
@@ -237,13 +241,17 @@ class EncoderLoss():
         pos_loss = -log(pos_pred + 1e-15).mean()
         neg_loss = -log(1 - neg_pred + 1e-15).mean()
         recon_loss = pos_loss + neg_loss
-        
-        kl_loss = F.kl_div(y_pred, y, reduction='batchmean', log_target=False)
-        
-        loss = recon_loss + kl_loss/data.num_nodes
+
+        kl_loss = F.kl_div(y_pred, y, reduction='batchmean', log_target=True)
+        kl_loss2 = self.kl_loss(mu, logstd)/data.num_nodes
+
+        loss = recon_loss + kl_loss
 
         return loss, y_pred, y
-                   
+
+    def kl_loss(self, mu, logstd):
+        return -0.5 * mean(sum(1 + 2 * logstd - mu**2 - logstd.exp()**2, dim=1))
+        
     def forward(self, z, mu, logstd, data, flag):
         
         if self.adversarial:
