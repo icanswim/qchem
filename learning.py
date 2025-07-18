@@ -62,17 +62,20 @@ class Learn(Learn):
                     b_loss, y_pred, y = self.criterion(*y_pred, data, flag)
                 else:
                     b_loss = self.criterion(y_pred, y)
-                # end of variation    
+                    
                 self.metrics.e_loss += b_loss.item()
                 self.metrics.n += self.bs
                 
-                if self.metrics.metric_func is not None: self.metrics.y.append(y)
-                if self.metrics.metric_func is not None: self.metrics.y_pred.append(y_pred)
+                if self.metrics.metric_func is not None: 
+                    self.metrics.y.append(y)
+                    self.metrics.y_pred.append(y_pred)
                     
                 if flag == 'train':
                     b_loss.backward()
                     self.opt.step()
-
+                    if hasattr(self.criterion, 'discriminator'):
+                        self.criterion.discriminator.reset_parameters()
+                # end of variation
         if flag == 'val': 
             self.scheduler.step(self.metrics.e_loss)
             self.metrics.lr_log.append(self.opt.param_groups[0]['lr'])

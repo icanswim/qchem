@@ -418,10 +418,9 @@ class QM9(QDataset):
                     
             output.append(out)
         
-        cat_dim = output[0].ndim -1
         if len(output) == 1: return output[0] 
-        elif is_tensor(output[0]): return torch_cat(output, dim=cat_dim)
-        else: return np.concatenate(output, axis=cat_dim)
+        elif is_tensor(output[0]): return torch_cat(output, dim=-1)
+        else: return np.concatenate(output, axis=-1)
 
     def open_file(self, in_file):
         with open(in_file) as f:
