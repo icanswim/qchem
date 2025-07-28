@@ -1,7 +1,7 @@
 import sys # required for relative imports in jupyter lab
 sys.path.insert(0, '../')
 
-from cosmosis.dataset import CDataset
+from cosmosis.dataset import CDataset, EmbedLookup
 
 from abc import abstractmethod
 import os, re, random, h5py, pickle
@@ -14,6 +14,7 @@ from scipy.sparse import coo_matrix
 
 from torch_geometric import datasets as pgds
 from torch_geometric.data import Data
+from torch_geometric.utils import one_hot
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -125,24 +126,33 @@ class Molecule():
         self.n_rads = np.asarray(n_rads, dtype=np.float32)
         self.hybridization = np.asarray(hybridization)
 
-        for bond in rdmol.GetBonds():
-            edge_indices, edge_attrs = [], []
-            for bond in rdmol.GetBonds():
-                i = bond.GetBeginAtomIdx()
-                j = bond.GetEndAtomIdx()
+        bond_type = []
+        bond_stereo = []
+        bond_conjugated = []
+        bond_ring = []
+        edge_indices, edge_attrs = [], []
 
-                e = []
-                e.append(Molecule.embed_lookup['bond_type'][str(bond.GetBondType())])
-                e.append(Molecule.embed_lookup['stereo'][str(bond.GetStereo())])
-                e.append(1 if bond.GetIsConjugated() else 0)
-                e.append(1 if atom.IsInRing() else 0)
-                
-                edge_indices += [[i, j], [j, i]]
-                edge_attrs += [e, e]
+        for bond in rdmol.GetBonds():
+            i = bond.GetBeginAtomIdx()
+            j = bond.GetEndAtomIdx()
+            bt = self.embed_lookup['bond_type'][str(bond.GetBondType())]
+            bond_type.extend([bt,bt])
+            st = self.embed_lookup['stereo'][str(bond.GetStereo())]
+            bond_stereo.extend([st,st])
+            cj = 1 if bond.GetIsConjugated() else 0
+            bond_conjugated.extend([cj,cj])
+            rg = 1 if bond.IsInRing() else 0
+            bond_ring.extend([rg,rg])
+
+            edge_indices += [[i, j], [j, i]]
 
         edge_indices = np.reshape(np.asarray(edge_indices, dtype=np.int64), (-1, 2)).T
         self.edge_indices = np.ascontiguousarray(edge_indices)
-        self.edge_attr = np.reshape(np.asarray(edge_attrs, dtype=np.float32), (-1, 4))
+        
+        self.bond_type = np.reshape(np.asarray(bond_type, dtype=np.float32), (-1, 2))
+        self.bond_stereo = np.reshape(np.asarray(bond_stereo, dtype=np.float32), (-1, 2))
+        self.bond_conjugated = np.reshape(np.asarray(bond_conjugated, dtype=np.float32), (-1, 2))
+        self.bond_ring = np.reshape(np.asarray(bond_ring, dtype=np.float32), (-1, 2))
         
         self.rdmol_block = Chem.MolToMolBlock(rdmol)
         self.n_atoms = int(rdmol.GetNumAtoms())

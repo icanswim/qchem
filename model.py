@@ -16,6 +16,76 @@ from torch_geometric.utils import batched_negative_sampling, negative_sampling
 
 from torch import isnan, log, abs
 
+class GModel(CModel):
+
+    def forward(self, data):
+        """
+        Data.feature = array
+        """
+        filter_keys = [] # keys not to be included
+        if self.y is not None: filter_keys.append(self.y)
+        edge_attr = []
+        x = []
+        # if any features are to be embedded, embed them, add keys to filter
+        if self.embed_param is not None:
+            embedded_dict = self.embed_features(data)
+            for e, embed in embedded_dict.items():
+                if e in self.edge_attr:
+                    edge_attr.append(embed)
+                else:
+                    x.append(embed)
+                filter_keys.append(e)
+                    
+        if self.edge_attr is not None:
+            for j in self.edge_attr:
+                if j not in filter_keys:
+                    edge_attr.append(data.j)
+            edge_attr = cat(edge_attr, dim=-1)
+            
+        if self.data_keys is not None: 
+            for k in self.data_keys:
+                if k not in filter_keys:
+                    x.append(data.k)
+            x = cat(x, dim=-1)
+
+        for l in self.layers: 
+            if hasattr(l, 'forward'):
+                # inspect the forward() of the layer inorder to route inputs
+                fwd_param = inspect.signature(l.forward).parameters
+                if 'input' in fwd_param: # the Sequence module
+                    for s in l:
+                        fwd_param = inspect.signature(s.forward).parameters
+                        if 'x' and 'batch' in fwd_param: 
+                            x = s(x, batch=data.batch)
+                        elif 'x' and 'edge_index' and 'edge_attr' in fwd_param:
+                            x = s(x, edge_index=data.edge_index, edge_attr=edge_attr)
+                        elif 'x' and 'edge_index' in fwd_param:
+                            x = s(x, edge_index=data.edge_index)
+                        elif 'x' in fwd_param:
+                            x = s(x)
+                        else:
+                            pass
+                else:        
+                    if 'x' and 'batch' in fwd_param:
+                        x = l(x, batch=data.batch)
+                    elif 'x' and 'edge_index' and 'edge_attr' in fwd_param:
+                        x = l(x, edge_index=data.edge_index, edge_attr=edge_attr)
+                    elif 'x' and 'edge_index' in fwd_param:
+                        x = l(x, edge_index=data.edge_index)
+                    elif 'x' in fwd_param:
+                        x = l(x)
+                    else:
+                        pass
+             
+        if self.pooling is not None:
+            x = self.pooling(x, batch=data.batch)
+        if self.activation is not None:
+            x = self.activation(x)
+        if self.ffnet is not None:
+            x = self.ffnet(x)
+
+        return x
+
 class PygModel(nn.Module):
     """
     A PyG model wrapper
@@ -88,7 +158,7 @@ class NetConv(nn.Module):
         return self.conv.forward(x, edge_index, edge_attr)
         
           
-class GraphNet(CModel):
+class GraphNet(GModel):
     """
     builds PyG conv nets
     
@@ -104,6 +174,7 @@ class GraphNet(CModel):
     """
     def conv_unit(self, in_channels, out_channels, norm_param={}, layer_param={},
                       convolution='SAGEConv', dropout=.1, conv_act='ReLU', normal='LayerNorm'):
+
         _conv=[]
         if convolution in ['NetConv']: 
             _conv.append(NetConv(in_channels, out_channels, **layer_param))
@@ -118,19 +189,14 @@ class GraphNet(CModel):
                   
     def build(self, in_channels=0, hidden=0, out_channels=0, depth=2, dropout=.2,
               pooling='global_mean_pool', activation='ReLU', normal='LayerNorm',
-              convolution='SAGEConv', conv_act='ReLU', 
+              convolution='SAGEConv', conv_act='ReLU', data_keys=['x'], edge_attr=[], 
               layer_param={}, norm_param={}, 
               ffn_param={'in_channels': 0, 'hidden': 0, 'out_channels': 0, 
-                         'activation': 'ReLU'}):
-        
-        if activation is not None:
-            self.activation = getattr(nn, activation)()
+                         'activation': 'ReLU'}, **kwargs):
 
-        if pooling is not None:
-            self.pooling = getattr(pool, pooling)
-        else:
-            self.pooling = None
-            
+        self.data_keys = data_keys
+        self.edge_attr = edge_attr
+        
         self.layers = []    
         self.layers.append(self.conv_unit(in_channels, hidden, convolution=convolution, 
                                           conv_act=conv_act, dropout=dropout, normal=normal,
@@ -142,57 +208,27 @@ class GraphNet(CModel):
         self.layers.append(self.conv_unit(hidden, out_channels, convolution=convolution, 
                                           conv_act=None, dropout=None, normal=None,
                                           norm_param=norm_param, layer_param=layer_param))
-
-        if ffn_param is not None:
-            self.ffn = FFNet(ffn_param)
-        else:
-            self.ffn = None
         
+        if pooling is not None:
+            self.pooling = getattr(pool, pooling)
+        else: 
+            self.pooling = None
+
+        if activation is not None:
+            self.activation = getattr(nn, activation)
+        else:
+            self.activation = None
+            
+        if ffn_param is not None:
+            self.ffnet = FFNet(ffn_param)
+        else:
+            self.ffnet = None
+
         print('GraphNet {} loaded...'.format(convolution))
                             
-    def forward(self, data):
-        x = data.x
+    
         
-        for l in self.layers: 
-            if hasattr(l, 'forward'):
-                fwd_param = inspect.signature(l.forward).parameters
-                if 'input' in fwd_param: # the Sequence module
-                    for s in l:
-                        fwd_param = inspect.signature(s.forward).parameters
-                        if 'x' and 'batch' in fwd_param: 
-                            x = s(x, batch=data.batch)
-                        elif 'x' and 'edge_index' and 'edge_attr' in fwd_param:
-                            x = s(x, edge_index=data.edge_index, edge_attr=data.edge_attr)
-                        elif 'x' and 'edge_index' in fwd_param:
-                            x = s(x, edge_index=data.edge_index)
-                        elif 'x' in fwd_param:
-                            x = s(x)
-                        else:
-                            pass
-                else:        
-                    if 'x' and 'batch' in fwd_param:
-                        x = l(x, batch=data.batch)
-                    elif 'x' and 'edge_index' and 'edge_attr' in fwd_param:
-                        x = l(x, edge_index=data.edge_index, edge_attr=data.edge_attr)
-                    elif 'x' and 'edge_index' in fwd_param:
-                        x = l(x, edge_index=data.edge_index)
-                    elif 'x' in fwd_param:
-                        x = l(x)
-                    else:
-                        pass
-                
-        if self.pooling is not None:
-            x = self.pooling(x, data.batch)
-            
-        if self.activation is not None:
-            x = self.activation(x)
-            
-        if self.ffn is not None:
-            x = self.ffn(x)
-             
-        return x
-        
-class GraphNetVariationalEncoder(CModel):
+class GraphNetVariationalEncoder(GModel):
     """https://pytorch-geometric.readthedocs.io/en/2.5.2/_modules/torch_geometric/nn/models/autoencoder.html
     https://arxiv.org/abs/1611.07308
     """
