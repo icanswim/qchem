@@ -146,13 +146,13 @@ class Molecule():
 
             edge_indices += [[i, j], [j, i]]
 
-        edge_indices = np.reshape(np.asarray(edge_indices, dtype=np.int64), (-1, 2)).T
+        edge_indices = np.reshape(np.asarray(edge_indices, dtype=np.int64), (2, -1))
         self.edge_indices = np.ascontiguousarray(edge_indices)
         
-        self.bond_type = np.reshape(np.asarray(bond_type, dtype=np.float32), (-1, 2))
-        self.bond_stereo = np.reshape(np.asarray(bond_stereo, dtype=np.float32), (-1, 2))
-        self.bond_conjugated = np.reshape(np.asarray(bond_conjugated, dtype=np.float32), (-1, 2))
-        self.bond_ring = np.reshape(np.asarray(bond_ring, dtype=np.float32), (-1, 2))
+        self.bond_type = np.asarray(bond_type, dtype=np.int64)
+        self.bond_stereo = np.asarray(bond_stereo, dtype=np.int64)
+        self.bond_conjugated = np.asarray(bond_conjugated, dtype=np.float32)
+        self.bond_ring = np.asarray(bond_ring, dtype=np.float32)
         
         self.rdmol_block = Chem.MolToMolBlock(rdmol)
         self.n_atoms = int(rdmol.GetNumAtoms())
@@ -420,14 +420,14 @@ class QM9(QDataset):
                     out = _out[:,:,ci]
                 else:
                     out = _out
-                    
+   
             if f in self.transforms:
                 transforms = self.transforms[f] #get the list of transforms for this feature
                 for T in transforms:
                     out = T(out)
                     
             output.append(out)
-        
+
         if len(output) == 1: return output[0] 
         elif is_tensor(output[0]): return torch_cat(output, dim=-1)
         else: return np.concatenate(output, axis=-1)

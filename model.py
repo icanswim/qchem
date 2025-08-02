@@ -5,6 +5,8 @@ sys.path.insert(0, '../')
 from cosmosis.model import CModel, FFNet
 
 from torch import nn, log, mean, sum, exp, randn_like, matmul, Tensor, cat, sigmoid
+from torch import isnan, log, abs, reshape
+
 import torch.nn.functional as F
 from torch.optim import Adam
 
@@ -14,9 +16,15 @@ from torch_geometric.nn import NNConv, VGAE, GCNConv
 
 from torch_geometric.utils import batched_negative_sampling, negative_sampling
 
-from torch import isnan, log, abs
+
 
 class GModel(CModel):
+
+    def build(self, **kwargs):
+        self.layers = []
+        self.edge_attr = []
+        self.data_keys = []
+        raise NotImplementedError('subclass and implement build()...')
 
     def forward(self, data):
         """
@@ -35,17 +43,17 @@ class GModel(CModel):
                 else:
                     x.append(embed)
                 filter_keys.append(e)
-                    
-        if self.edge_attr is not None:
+
+        if len(self.edge_attr) > 0:
             for j in self.edge_attr:
                 if j not in filter_keys:
-                    edge_attr.append(data.j)
-            edge_attr = cat(edge_attr, dim=-1)
+                    edge_attr.append(getattr(data, j))
+            edge_attr = cat(edge_attr, dim=0)
             
-        if self.data_keys is not None: 
+        if len(self.data_keys) > 0: 
             for k in self.data_keys:
                 if k not in filter_keys:
-                    x.append(data.k)
+                    x.append(getattr(data, k))
             x = cat(x, dim=-1)
 
         for l in self.layers: 
@@ -75,15 +83,15 @@ class GModel(CModel):
                     elif 'x' in fwd_param:
                         x = l(x)
                     else:
-                        pass
-             
+                        pass  
+                        
         if self.pooling is not None:
             x = self.pooling(x, batch=data.batch)
         if self.activation is not None:
             x = self.activation(x)
         if self.ffnet is not None:
             x = self.ffnet(x)
-
+            
         return x
 
 class PygModel(nn.Module):
@@ -170,10 +178,13 @@ class GraphNet(GModel):
     pool = 'global_mean'/None
     dropout = float/None
     softmax = True/False
-    activation = nn.activation
+    activation = torch.nn.activation class name 'ReLU'
+    normal = torch_geometric.norm class name 'LayerNorm'
+    norm_param
+    layer_param
     """
     def conv_unit(self, in_channels, out_channels, norm_param={}, layer_param={},
-                      convolution='SAGEConv', dropout=.1, conv_act='ReLU', normal='LayerNorm'):
+                      convolution='SAGEConv', dropout=.1, conv_act='ReLU', normal ='LayerNorm'):
 
         _conv=[]
         if convolution in ['NetConv']: 
@@ -215,7 +226,7 @@ class GraphNet(GModel):
             self.pooling = None
 
         if activation is not None:
-            self.activation = getattr(nn, activation)
+            self.activation = getattr(nn, activation)()
         else:
             self.activation = None
             
