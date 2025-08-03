@@ -48,7 +48,7 @@ class GModel(CModel):
             for j in self.edge_attr:
                 if j not in filter_keys:
                     edge_attr.append(getattr(data, j))
-            edge_attr = cat(edge_attr, dim=0)
+            edge_attr = cat(edge_attr, dim=1)
             
         if len(self.data_keys) > 0: 
             for k in self.data_keys:

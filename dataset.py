@@ -151,9 +151,9 @@ class Molecule():
         
         self.bond_type = np.asarray(bond_type, dtype=np.int64)
         self.bond_stereo = np.asarray(bond_stereo, dtype=np.int64)
-        self.bond_conjugated = np.asarray(bond_conjugated, dtype=np.float32)
-        self.bond_ring = np.asarray(bond_ring, dtype=np.float32)
-        
+        self.bond_conjugated = np.reshape(np.asarray(bond_conjugated, dtype=np.float32), (-1))
+        self.bond_ring = np.reshape(np.asarray(bond_ring, dtype=np.float32), (-1))
+
         self.rdmol_block = Chem.MolToMolBlock(rdmol)
         self.n_atoms = int(rdmol.GetNumAtoms())
 
