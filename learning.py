@@ -33,14 +33,14 @@ class Learn(Learn):
             
         dataloader = self.DataLoader(dataset, batch_size=self.bs, 
                                      sampler=self.sampler(flag=flag), 
-                                     num_workers=0, pin_memory=True, 
+                                     num_workers=self.num_workers, pin_memory=True, 
                                      drop_last=drop_last)
         # tertiary loop
         for data in dataloader:
             if self.gpu: # overwrite the datadic with a new copy on the gpu
                 if type(data) == dict: 
                     _data = {}
-                    for k, v in data.items():
+                    for k in data:
                         _data[k] = data[k].to('cuda:0', non_blocking=True)
                     data = _data
                 else: 

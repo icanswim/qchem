@@ -20,6 +20,24 @@ from torch_geometric.utils import batched_negative_sampling, negative_sampling
 
 class GModel(CModel):
 
+    def __init__(self, model_param):
+        super().__init__(model_param)
+
+        if 'pooling' in model_param and model_param['pooling'] is not None:
+            self.pooling = getattr(pool, model_param['pooling'])
+        else: 
+            self.pooling = None
+
+        if 'activation' in model_param and model_param['activation'] is not None:
+            self.activation = getattr(nn, model_param['activation'])()
+        else:
+            self.activation = None
+            
+        if 'ffn_param' in model_param and model_param['ffn_param'] is not None:
+            self.ffnet = FFNet(**model_param['ffn_param'])
+        else:
+            self.ffnet = None
+
     def build(self, **kwargs):
         self.layers = []
         self.edge_attr = []
@@ -125,9 +143,9 @@ class PygModel(nn.Module):
         launcher = getattr(pygmodels, model_name)
         self.model = launcher(**pyg_param)
 
-        self.pool = pool
-        if pool is not None:
-            self.pool = getattr(pool, pool)()
+        self.pooling = pooling
+        if pooling is not None:
+            self.pool = getattr(pool, pooling)()
 
         if ffnet_param is not None:
             self.ffnet = FFNet(**ffn_param)
@@ -142,8 +160,8 @@ class PygModel(nn.Module):
 
         x = self.model(data.x, data.edge_index)
         
-        if self.pool is not None:
-            x = self.pool(x, data.batch)
+        if self.pooling is not None:
+            x = self.pooling(x, data.batch)
             
         if self.ffnet is not None:
             x = self.ffnet(x)  
@@ -175,7 +193,7 @@ class GraphNet(GModel):
     hidden = hidden length
     depth = number of layers
     conv = 'SAGEConv'
-    pool = 'global_mean'/None
+    pooling = 'global_mean'/None
     dropout = float/None
     softmax = True/False
     activation = torch.nn.activation class name 'ReLU'
@@ -201,9 +219,10 @@ class GraphNet(GModel):
     def build(self, in_channels=0, hidden=0, out_channels=0, depth=2, dropout=.2,
               pooling='global_mean_pool', activation='ReLU', normal='LayerNorm',
               convolution='SAGEConv', conv_act='ReLU', data_keys=['x'], edge_attr=[], 
-              layer_param={}, norm_param={}, 
-              ffn_param={'in_channels': 0, 'hidden': 0, 'out_channels': 0, 
-                         'activation': 'ReLU'}, **kwargs):
+              layer_param={}, norm_param={}, ffn_param=None):
+
+        """ffn_param={'in_channels': 0, 'hidden': 0, 'out_channels': 0, 
+                                         'activation': 'ReLU'}, **kwargs):"""
 
         self.data_keys = data_keys
         self.edge_attr = edge_attr
@@ -245,10 +264,10 @@ class GraphNetVariationalEncoder(GModel):
     """
     
     def build(self, in_channels, hidden, out_channels, depth, 
-                      convolution='GCNConv', pool=None, **kwargs):
+                      convolution='GCNConv', pooling=None, **kwargs):
         
         self.gnet = GraphNet({'in_channels':in_channels, 'hidden':hidden, 'out_channels':hidden, 
-                              'convolution':convolution, 'depth':depth, 'pool':pool, **kwargs})
+                              'convolution':convolution, 'depth':depth, 'pooling':pooling, **kwargs})
         self.mu = self.ff_unit(hidden, hidden, activation=None, norm=False, dropout=None)
         self.logstd = self.ff_unit(hidden, hidden, activation=None, norm=False, dropout=None)
         print('GraphNetVariationalEncoder loaded...')
@@ -260,7 +279,7 @@ class GraphNetVariationalEncoder(GModel):
 
         #reparametrize
         if self.training:
-            z = mu + randn_like(logstd) * exp(logstd)
+            mu = mu + randn_like(logstd) * exp(logstd)
 
         return z, mu, logstd
         
@@ -283,7 +302,7 @@ class EncoderLoss():
         self.adversarial = adversarial
         if self.adversarial:
             self.discriminator = FFNet(disc_param)
-            self.disc_optimizer = Adam(self.discriminator.parameters(), lr=.05)
+            self.disc_optimizer = Adam(self.discriminator.parameters(), lr=.01)
             
     def __call__(self, z, mu, logstd, data, flag):
         return self.forward(z, mu, logstd, data, flag)
@@ -308,7 +327,7 @@ class EncoderLoss():
 
         return real_loss + fake_loss
 
-    def recon_loss(self, z, mu, logstd, data):
+    def recon_loss(self, z, data):
         """Given latent variable (z), computes the binary cross
         entropy loss for positive edges (pos_edge_index) and negative
         sampled edges (neg_edge_index)."""
@@ -316,8 +335,10 @@ class EncoderLoss():
         pos_edge_index = data.edge_index
         neg_edge_index = batched_negative_sampling(pos_edge_index, data.batch, 
                                                        method='dense', force_undirected=True)
+
         pos_pred = self.decoder(z, pos_edge_index, sigmoid=True)
         neg_pred = self.decoder(z, neg_edge_index, sigmoid=True)
+
         pos_loss = -log(pos_pred + 1e-15).mean()
         neg_loss = -log(1 - neg_pred + 1e-15).mean()
         recon_loss = pos_loss + neg_loss
@@ -331,13 +352,11 @@ class EncoderLoss():
 
     def kl_loss(self, mu, logstd):
         logstd = logstd.clamp(max=10)
-        return -0.5 * mean(sum(1 + 2 * logstd - mu**2 - logstd.exp()**2, dim=1)) / mu.shape
+        return -0.5 * mean(sum(1 + 2 * logstd - mu**2 - logstd.exp()**2, dim=1))
         
     def forward(self, z, mu, logstd, data, flag):
-        recon_loss, y_pred, y = self.recon_loss(z, mu, logstd, data)
+        recon_loss, y_pred, y = self.recon_loss(z, data)
         kl_loss = self.kl_loss(mu, logstd)
-        print('recon_loss: ', recon_loss)
-        print('kl_loss: ', kl_loss)
 
         if self.adversarial:
             if flag == 'train':
@@ -346,9 +365,7 @@ class EncoderLoss():
                     disc_loss = self.discriminator_loss(z)
                     disc_loss.backward()
                     self.disc_optimizer.step()
-                    print('disc_loss: ', disc_loss)
             reg_loss = self.reg_loss(z)
-            print('reg_loss: ', reg_loss)
             loss = recon_loss + kl_loss + reg_loss
         else: 
             loss = recon_loss + kl_loss
