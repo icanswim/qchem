@@ -34,7 +34,7 @@ class GModel(CModel):
             self.activation = None
             
         if 'ffn_param' in model_param and model_param['ffn_param'] is not None:
-            self.ffnet = FFNet(**model_param['ffn_param'])
+            self.ffnet = FFNet(model_param['ffn_param'])
         else:
             self.ffnet = None
 
@@ -48,7 +48,7 @@ class GModel(CModel):
         """
         Data.feature = array
         """
-        filter_keys = [] # keys not to be included
+        filter_keys = [] # keys not to be included or already included
         if self.y is not None: filter_keys.append(self.y)
         edge_attr = []
         x = []
@@ -117,7 +117,6 @@ class PygModel(nn.Module):
     A PyG model wrapper
     
     model_name = 'ModelName'
-    ffnet = True/False
     pooling = 'global_mean' / None
     softmax = True/False
     pyg_param = {'in_channels': int,
@@ -133,26 +132,23 @@ class PygModel(nn.Module):
                  'activation': str}
     """
     
-    def __init__(self, model_name='GCN', pooling='global_mean', softmax=False,
-                    pyg_param = {'in_channels': 0, 'hidden_channels': 0, 
-                                 'out_channels': 0, 'num_layers': 2},
-                    ffn_param = {'in_channels': 0, 'hidden': 0, 'out_channels': 0,
-                                 'activation': 'ReLU'}):
+    def __init__(self, model_param):
         super().__init__()
+        
+        launcher = getattr(pygmodels, model_param['model_name'])
+        self.model = launcher(**model_param['pyg_param'])
 
-        launcher = getattr(pygmodels, model_name)
-        self.model = launcher(**pyg_param)
-
-        self.pooling = pooling
-        if pooling is not None:
-            self.pool = getattr(pool, pooling)()
-
-        if ffnet_param is not None:
-            self.ffnet = FFNet(**ffn_param)
-        else:
-            self.ffnet = None
+        if 'pooling' in model_param and model_param['pooling'] is not None:
+            self.pooling = getattr(pool, model_param['pooling'])
+        else: self.pooling = None
             
-        self.softmax = softmax
+        if 'ffn_param' in model_param and model_param['ffn_param'] is not None:
+            self.ffnet = FFNet(model_param['ffn_param'])
+        else: self.ffnet = None
+            
+        if 'softmax' in model_param and model_param['softmax'] is True:
+            self.softmax = softmax
+        else: self.softmax = False
         
         print('pytorch geometric model {} loaded...'.format(model_param['model_name']))
         
@@ -219,10 +215,10 @@ class GraphNet(GModel):
     def build(self, in_channels=0, hidden=0, out_channels=0, depth=2, dropout=.2,
               pooling='global_mean_pool', activation='ReLU', normal='LayerNorm',
               convolution='SAGEConv', conv_act='ReLU', data_keys=['x'], edge_attr=[], 
-              layer_param={}, norm_param={}, ffn_param=None):
+              layer_param={}, norm_param={}, ffn_param=None, embed_param=None):
 
-        """ffn_param={'in_channels': 0, 'hidden': 0, 'out_channels': 0, 
-                                         'activation': 'ReLU'}, **kwargs):"""
+        """ffn_param={'in_channels': 0, 'hidden': 0, 'out_channels': 0, 'activation': 'ReLU'}
+        """
 
         self.data_keys = data_keys
         self.edge_attr = edge_attr
