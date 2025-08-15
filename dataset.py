@@ -1,6 +1,8 @@
 import sys # required for relative imports in jupyter lab
 sys.path.insert(0, '../')
 
+import re
+
 from cosmosis.dataset import CDataset, EmbedLookup
 
 from abc import abstractmethod
@@ -417,7 +419,7 @@ class QM9(QDataset):
             else:
                 _out = getattr(data, f)
                 
-                if _out.ndim == 3: #if multiple conformations
+                if hasattr(_out, 'ndim') and _out.ndim == 3: #if multiple conformations
                     out = _out[:,:,ci]
                 else:
                     out = _out
@@ -831,7 +833,8 @@ class QM7X(QDataset, Molecule):
         print('molecular formula (idmol) mapped: ', len(datadic))
         print('total molecular structures (idconf) mapped: ', structure_count)
         return datadic                                        
-        
+
+
 class QM7(CDataset):
     """http://quantum-machine.org
     
@@ -887,7 +890,8 @@ class QM7(CDataset):
                     out = np.pad(out, ((0, 23-out.shape[0]), (0, 23-out.shape[1])))
                 datadic[i].update({f: out})        
         return datadic
-        
+
+
 class QM7b(CDataset):
     """http://quantum-machine.org
     
@@ -949,5 +953,38 @@ class PGDS(CDataset):
         ds = getattr(pgds, dataset)(**pg_param)
         self.ds_idx = list(range(len(ds)))
         return ds
-                
+
+
+class SmileReTokenizer():
+
+    pattern = r"""(\[[^\]]+]|Br?|Cl?|N|O|S|P|F|I|b|c|n|o|s|p|\(|\)|\.|=|
+                        #|-|\+|\\|\/|:|~|@|\?|>>?|\*|\$|\%[0-9]{2}|[0-9])"""
+    
+    def __init__(self, re_pattern = pattern):
+        self.regex = re.compile(re_pattern)
+
+    def __call__(self, text):
+        return self.tokenize(text)
+
+    def tokenize(self, text):
+        tokens = [token for token in self.regex.findall(text)]
+        return tokens
+
+
+
+def create_srt_lookup(vocab_file='./data/smileretokenizer_vocab.txt'):
+    """
+    https://github.com/deepchem/deepchem/blob/master/deepchem/feat/tests/data/vocab.txt
+    """
+    lookup = {}
+    
+    with open(vocab_file, "r", encoding="utf-8") as reader:
+        tokens = reader.readlines()
+        
+    for index, token in enumerate(tokens):
+        token = token.rstrip("\n")
+        lookup[token] = index
+    return lookup
+
+    
       
