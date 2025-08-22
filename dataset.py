@@ -3,7 +3,7 @@ sys.path.insert(0, '../')
 
 import re
 
-from cosmosis.dataset import CDataset
+from cosmosis.dataset import CDataset, Encode
 
 from abc import abstractmethod
 import os, re, random, h5py, pickle
@@ -225,7 +225,7 @@ class Molecule():
         tokenizer = SmileReTokenizer()
         return tokenizer(self.smile)
 
-            
+
 class QM9Mol(Molecule):
     
     qm9_features = ['A','B','C','mu','alpha','homo','lumo', 'gap','r2','zpve',
@@ -307,7 +307,7 @@ class QDataset(CDataset):
         self.n_conformers = n_conformers
         super().__init__(**kwargs)
         print('QDataset created...')
-        
+
     def __getitem__(self, i):         
 
         if self.input_dict == None:
@@ -348,7 +348,7 @@ class QDataset(CDataset):
             
         return ci
 
-
+        
 class QM9(QDataset):
     """http://quantum-machine.org
     
@@ -451,7 +451,7 @@ class QM9(QDataset):
             return data
         
     def load_data(self, in_dir='./data/qm9/dsgdb9nsd.xyz/', n=133885, filter_on=None, 
-                  use_pickle=False, dtype='float32', n_conformers=0, dict2data=False):
+                  use_pickle=False, dtype='float32', n_conformers=0, dict2data=False, **kwargs):
 
         self.n_conformers = n_conformers
         self.dict2data = dict2data
@@ -521,6 +521,22 @@ class QM9(QDataset):
         except:
             print('uncharaterized file missing...')
         return unchar
+
+
+class QM9_seq(QM9):
+
+    def __init__(self, vocab, **kwargs):
+        super().__init__(vocab, **kwargs)
+        self.encoding = Encode(vocab)
+
+    def __getitem__(self, i):
+        
+        _data = super().__getitem__(i)
+        tokens = _data['tokens'].astype(np.int64)
+        y = _data['tokens'].astype(np.int64).copy()
+        pos = np.arange(0, tokens.shape[0]-1, dtype=np.int64) 
+        
+        return {'tokens': tokens[:-1], 'y': y[1:], 'position': pos}
         
         
 class ANI1x(QDataset, Molecule):
