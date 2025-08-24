@@ -22,7 +22,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from torch import cat as torch_cat
-from torch import is_tensor
+from torch import is_tensor, as_tensor
 
 
 class Molecule():
@@ -158,6 +158,8 @@ class Molecule():
 
         self.rdmol_block = Chem.MolToMolBlock(rdmol)
         self.n_atoms = int(rdmol.GetNumAtoms())
+        self.c_smile = Chem.MolToSmiles(rdmol)
+        self.tokens = self.smile_re_tokenize(self.c_smile)
 
     def xyz_from_rdmol(self, rdmol):
         xyz = []
@@ -221,9 +223,9 @@ class Molecule():
         indexlist = indexlist[::-1]  #invert
         return matrix[indexlist][:,indexlist]
 
-    def smile_re_tokenize(self):
+    def smile_re_tokenize(self, smile):
         tokenizer = SmileReTokenizer()
-        return tokenizer(self.smile)
+        return tokenizer(smile)
 
 
 class QM9Mol(Molecule):
@@ -247,7 +249,7 @@ class QM9Mol(Molecule):
         self.in_file = in_file
         self.qm9_block = self.open_file(in_file)
         self.smile = self.qm9_block[-2]
-        self.tokens = self.smile_re_tokenize()
+        
         self.idx = np.asarray(int(self.in_file[-10:-4]), dtype='int64')
         qm9_n_atoms = int(self.qm9_block[0])
         
@@ -525,16 +527,17 @@ class QM9(QDataset):
 
 class QM9_seq(QM9):
 
-    def __init__(self, vocab, **kwargs):
-        super().__init__(vocab, **kwargs)
-        self.encoding = Encode(vocab)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if 'vocab' in kwargs:
+            self.encoding = Encode(kwargs['vocab'])
 
     def __getitem__(self, i):
         
         _data = super().__getitem__(i)
-        tokens = _data['tokens'].astype(np.int64)
-        y = _data['tokens'].astype(np.int64).copy()
-        pos = np.arange(0, tokens.shape[0]-1, dtype=np.int64) 
+        tokens = _data['tokens']
+        y = _data['tokens']
+        pos = as_tensor(np.arange(0, tokens.shape[0]-1, dtype=np.int64))
         
         return {'tokens': tokens[:-1], 'y': y[1:], 'position': pos}
         
