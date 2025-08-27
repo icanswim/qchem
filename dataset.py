@@ -527,21 +527,36 @@ class QM9(QDataset):
 
 class QM9_seq(QM9):
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        if 'vocab' in kwargs:
-            self.encoding = Encode(kwargs['vocab'])
+    def __init__(self, prompt=None, vocab={}, tokenizer=None, **kwargs):
 
+        self.tokenizer = tokenizer()
+        self.prompt = prompt
+        self.encoding = Encode(vocab, pad_token='[PAD]')
+                
+        if prompt == None:
+            super().__init__(**kwargs)
+        else:
+            self.ds_idx = [0]
+        
     def __getitem__(self, i):
         
-        _data = super().__getitem__(i)
-        tokens = _data['tokens']
-        y = _data['tokens']
-        pos = as_tensor(np.arange(0, tokens.shape[0]-1, dtype=np.int64))
+        if self.prompt == None:
+            data = super().__getitem__(i)  
+        else:
+            data = self.create_prompt(self.prompt)  
+
+        tokens = as_tensor(data['tokens'][:-1])
+        y = as_tensor(data['tokens'][1:])
+        pos = as_tensor(np.arange(0, tokens.shape[0], dtype=np.int64))
         
-        return {'tokens': tokens[:-1], 'y': y[1:], 'position': pos}
-        
-        
+        return {'tokens': tokens, 'y': y, 'position': pos}
+
+    def create_prompt(self, prompt):
+        # tokenize the prompt
+        tokens = self.encoding(self.tokenizer(prompt))
+        return {'tokens': tokens}
+
+
 class ANI1x(QDataset, Molecule):
     """https://www.nature.com/articles/s41597-020-0473-z#Sec11
     https://github.com/aiqm/ANI1x_datasets
