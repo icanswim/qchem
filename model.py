@@ -17,8 +17,8 @@ from torch_geometric.nn import NNConv, VGAE, GCNConv
 from torch_geometric.utils import batched_negative_sampling, negative_sampling
 
 
-
 class GModel(CModel):
+    """Graph Model base"""
 
     def __init__(self, model_param):
         super().__init__(model_param)
@@ -252,7 +252,6 @@ class GraphNet(GModel):
 
         print('GraphNet {} loaded...'.format(convolution))
                             
-    
         
 class GraphNetVariationalEncoder(GModel):
     """https://pytorch-geometric.readthedocs.io/en/2.5.2/_modules/torch_geometric/nn/models/autoencoder.html
