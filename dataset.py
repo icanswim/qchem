@@ -25,6 +25,45 @@ from torch import cat as torch_cat
 from torch import is_tensor, as_tensor
 
 
+
+class SmileReTokenizer():
+
+    """tokenize smiles using a regular expression pattern 
+
+    the default pattern is from
+    Molecular Transformer: A Model for Uncertainty-Calibrated Chemical Reaction Prediction
+    """
+    pattern = r"""(\[[^\]]+]|Br?|Cl?|N|O|S|P|F|I|b|c|n|o|s|p|\(|\)|\.|=|
+                        #|-|\+|\\|\/|:|~|@|\?|>>?|\*|\$|\%[0-9]{2}|[0-9])"""
+
+    #d_vocab = 591
+    
+    def __init__(self, re_pattern = pattern):
+        self.regex = re.compile(re_pattern)
+
+    def __call__(self, text):
+        return self.tokenize(text)
+
+    def tokenize(self, text):
+        tokens = [token for token in self.regex.findall(text)]
+        return tokens
+
+    @classmethod
+    def create_srt_vocab(self, vocab_file='./data/smileretokenizer_vocab.txt'):
+        """
+        https://github.com/deepchem/deepchem/blob/master/deepchem/feat/tests/data/vocab.txt
+        """
+        with open(vocab_file, "r", encoding="utf-8") as reader:
+            tokens = reader.readlines()
+            
+        vocab = {}
+        for index, token in enumerate(tokens):
+            token = token.rstrip("\n")
+            vocab[token] = index
+            
+        return vocab
+
+
 class Molecule():
     """an abstract class with utilities for creating molecule instances
     or as a mixin"""
@@ -528,33 +567,33 @@ class QM9(QDataset):
 
 class QM9_seq(QM9):
 
-    def __init__(self, prompt=None, vocab={}, tokenizer=None, transforms={}, **kwargs):
-                
-        if prompt == None:
-            super().__init__(transforms=transforms, **kwargs)
-        else:
-            self.ds_idx = [0]
-            
-        self.tokenizer = tokenizer()
-        self.transforms = transforms
-        self.prompt = prompt
+    def load_data(self, prompt=None, tokenizer=SmileReTokenizer, vocab={}, transforms={}, **kwargs):
         #encoding and decode used by transformer Metrics
         self.encoding = Encode(vocab=vocab, pad_token='[PAD]')
-    
+        self.prompt = prompt
+        #QM9 has a feature 'tokens' which are tokenized smiles
+        #the tokenizer is used in inference
+        self.tokenizer = tokenizer() 
+
+        if prompt == None:
+            return super().load_data(transforms=transforms, **kwargs)
+        else:
+            self.ds_idx = [0]
+            prompt = self.tokenizer(prompt)
+            return {'tokens': prompt}
+            
     def __getitem__(self, i):
         
         if self.prompt == None:
             data = super().__getitem__(i)  
         else:
-            _data = self.create_prompt(self.prompt)
+            _data = self.ds
             data = {}
-        
             for feature, Transforms in self.transforms.items():
                 out = _data[feature]
                 for T in Transforms:
                     out = T(out)
                 data[feature] = out
-
             del _data
 
         tokens = data['tokens'][:-1].clone()
@@ -563,11 +602,6 @@ class QM9_seq(QM9):
         del data
         
         return {'tokens': tokens, 'y': y, 'position': pos}
-
-    def create_prompt(self, prompt):
-        # tokenize the prompt
-        tokens = self.tokenizer(prompt)
-        return {'tokens': tokens}
 
 
 class ANI1x(QDataset, Molecule):
@@ -1010,42 +1044,6 @@ class PGDS(CDataset):
         return ds
 
 
-class SmileReTokenizer():
-
-    """tokenize smiles using a regular expression pattern 
-
-    the default pattern is from
-    Molecular Transformer: A Model for Uncertainty-Calibrated Chemical Reaction Prediction
-    """
-    pattern = r"""(\[[^\]]+]|Br?|Cl?|N|O|S|P|F|I|b|c|n|o|s|p|\(|\)|\.|=|
-                        #|-|\+|\\|\/|:|~|@|\?|>>?|\*|\$|\%[0-9]{2}|[0-9])"""
-
-    #d_vocab = 591
-    
-    def __init__(self, re_pattern = pattern):
-        self.regex = re.compile(re_pattern)
-
-    def __call__(self, text):
-        return self.tokenize(text)
-
-    def tokenize(self, text):
-        tokens = [token for token in self.regex.findall(text)]
-        return tokens
-
-    @classmethod
-    def create_srt_vocab(self, vocab_file='./data/smileretokenizer_vocab.txt'):
-        """
-        https://github.com/deepchem/deepchem/blob/master/deepchem/feat/tests/data/vocab.txt
-        """
-        with open(vocab_file, "r", encoding="utf-8") as reader:
-            tokens = reader.readlines()
-            
-        vocab = {}
-        for index, token in enumerate(tokens):
-            token = token.rstrip("\n")
-            vocab[token] = index
-            
-        return vocab
 
     
       
