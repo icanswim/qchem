@@ -27,7 +27,6 @@ from torch import is_tensor, as_tensor
 
 
 class SmileReTokenizer():
-
     """tokenize smiles using a regular expression pattern 
 
     the default pattern is from
@@ -36,7 +35,7 @@ class SmileReTokenizer():
     pattern = r"""(\[[^\]]+]|Br?|Cl?|N|O|S|P|F|I|b|c|n|o|s|p|\(|\)|\.|=|
                         #|-|\+|\\|\/|:|~|@|\?|>>?|\*|\$|\%[0-9]{2}|[0-9])"""
 
-    #d_vocab = 591
+    d_vocab = 591
     
     def __init__(self, re_pattern = pattern):
         self.regex = re.compile(re_pattern)

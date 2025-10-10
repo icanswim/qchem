@@ -38,20 +38,20 @@ class GModel(CModel):
         else:
             self.ffnet = None
 
-    def build(self, **kwargs):
+    def build(self, **model_param):
         self.layers = []
         self.edge_attr = []
         self.data_keys = []
         raise NotImplementedError('subclass and implement build()...')
 
-    def forward(self, data):
+    def forward(self, data=None, batch=None, edge_index=None, edge_attr=None):
         """
         Data.feature = array
         """
+        X = []
         filter_keys = [] # keys not to be included or already included
         if self.y is not None: filter_keys.append(self.y)
-        edge_attr = []
-        x = []
+            
         # if any features are to be embedded, embed them, add keys to filter
         if self.embed_param is not None:
             embedded_dict = self.embed_features(data)
@@ -62,18 +62,26 @@ class GModel(CModel):
                     x.append(embed)
                 filter_keys.append(e)
 
-        if len(self.edge_attr) > 0:
+        if edge_attr is None and len(self.edge_attr) > 0:
+            edge_attr = []
             for j in self.edge_attr:
                 if j not in filter_keys:
                     edge_attr.append(getattr(data, j))
             edge_attr = cat(edge_attr, dim=1)
-            
-        if len(self.data_keys) > 0: 
+
+        if type(data) == dict:
+            for k in data.keys(): 
+                if k not in filter_keys:
+                    X.append(data[k])
+            if len(x) != 0: x = cat(x, dim=-1) 
+        elif self.data_keys is not None and all(hasattr(data, dk) for dk in self.data_keys):
             for k in self.data_keys:
                 if k not in filter_keys:
                     x.append(getattr(data, k))
-            x = cat(x, dim=-1)
-
+            if len(x) != 0: x = cat(x, dim=-1)
+        else:
+            x = data
+        
         for l in self.layers: 
             if hasattr(l, 'forward'):
                 # inspect the forward() of the layer inorder to route inputs
@@ -82,29 +90,31 @@ class GModel(CModel):
                     for s in l:
                         fwd_param = inspect.signature(s.forward).parameters
                         if 'x' and 'batch' in fwd_param: 
-                            x = s(x, batch=data.batch)
+                            x = s(x, batch=data.batch if batch is None else batch)
                         elif 'x' and 'edge_index' and 'edge_attr' in fwd_param:
-                            x = s(x, edge_index=data.edge_index, edge_attr=edge_attr)
+                            x = s(x, edge_index=data.edge_index if edge_index is None else edge_index,
+                                  edge_attr=edge_attr)
                         elif 'x' and 'edge_index' in fwd_param:
-                            x = s(x, edge_index=data.edge_index)
+                            x = s(x, edge_index=data.edge_index if edge_index is None else edge_index)
                         elif 'x' in fwd_param:
                             x = s(x)
                         else:
                             pass
                 else:        
                     if 'x' and 'batch' in fwd_param:
-                        x = l(x, batch=data.batch)
+                        x = l(x, batch=data.batch if batch is None else batch)
                     elif 'x' and 'edge_index' and 'edge_attr' in fwd_param:
-                        x = l(x, edge_index=data.edge_index, edge_attr=edge_attr)
+                        x = l(x, edge_index=data.edge_index if edge_index is None else edge_index,
+                              edge_attr=edge_attr)
                     elif 'x' and 'edge_index' in fwd_param:
-                        x = l(x, edge_index=data.edge_index)
+                        x = l(x, edge_index=data.edge_index if edge_index is None else edge_index)
                     elif 'x' in fwd_param:
                         x = l(x)
                     else:
                         pass  
                         
         if self.pooling is not None:
-            x = self.pooling(x, batch=data.batch)
+            x = self.pooling(x, batch=data.batch if batch is None else batch)
         if self.activation is not None:
             x = self.activation(x)
         if self.ffnet is not None:
@@ -112,60 +122,20 @@ class GModel(CModel):
             
         return x
 
-class PygModel(nn.Module):
-    """
-    A PyG model wrapper
-    
-    model_name = 'ModelName'
-    pooling = 'global_mean' / None
-    softmax = True/False
-    pyg_param = {'in_channels': int,
-                 'hidden_channels': int,
-                 'num_layers': int,
-                 'out_channels': int,
-                 'dropout': float,
-                 'norm': None}
-    ffn_param = {'in_channels': int,
-                 'hidden': int,
-                 'out_channels': int,
-                 'dropout': float,
-                 'activation': str}
-    """
-    
-    def __init__(self, model_param):
-        super().__init__()
-        
-        launcher = getattr(pygmodels, model_param['model_name'])
-        self.model = launcher(**model_param['pyg_param'])
+    def gonv_unit(self, in_channels, out_channels, norm_param={}, layer_param={},
+                      convolution='SAGEConv', dropout=.1, conv_act='ReLU', normal ='LayerNorm'):
+        """graph convolution unit"""
+        layers = []
+        if convolution in ['NetConv']: 
+            layers.append(NetConv(in_channels, out_channels, **layer_param))
+        else: 
+            layers.append(getattr(conv, convolution)(in_channels, out_channels, **layer_param))
+        if normal is not None:
+            layers.append(getattr(norm, normal)(out_channels, **norm_param))
+        if conv_act is not None: layers.append(getattr(nn, conv_act)())
+        if dropout is not None: layers.append(nn.Dropout(p=dropout))
 
-        if 'pooling' in model_param and model_param['pooling'] is not None:
-            self.pooling = getattr(pool, model_param['pooling'])
-        else: self.pooling = None
-            
-        if 'ffn_param' in model_param and model_param['ffn_param'] is not None:
-            self.ffnet = FFNet(model_param['ffn_param'])
-        else: self.ffnet = None
-            
-        if 'softmax' in model_param and model_param['softmax'] is True:
-            self.softmax = softmax
-        else: self.softmax = False
-        
-        print('pytorch geometric model {} loaded...'.format(model_param['model_name']))
-        
-    def forward(self, data):
-
-        x = self.model(data.x, data.edge_index)
-        
-        if self.pooling is not None:
-            x = self.pooling(x, data.batch)
-            
-        if self.ffnet is not None:
-            x = self.ffnet(x)  
-            
-        if self.softmax: 
-            x = F.log_softmax(x, dim=1)
-            
-        return x
+        return nn.Sequential(*layers)
         
         
 class NetConv(nn.Module):
@@ -186,7 +156,7 @@ class GraphNet(GModel):
     
     in_channels = node feature length
     out_channels = model output length
-    hidden = hidden length
+    hidden = hidden length (hidden = out_channel when depth == 1)
     depth = number of layers
     conv = 'SAGEConv'
     pooling = 'global_mean'/None
@@ -197,21 +167,6 @@ class GraphNet(GModel):
     norm_param
     layer_param
     """
-    def conv_unit(self, in_channels, out_channels, norm_param={}, layer_param={},
-                      convolution='SAGEConv', dropout=.1, conv_act='ReLU', normal ='LayerNorm'):
-
-        _conv=[]
-        if convolution in ['NetConv']: 
-            _conv.append(NetConv(in_channels, out_channels, **layer_param))
-        else: 
-            _conv.append(getattr(conv, convolution)(in_channels, out_channels, **layer_param))
-        if normal is not None:
-            _conv.append(getattr(norm, normal)(out_channels, **norm_param))
-        if conv_act is not None: _conv.append(getattr(nn, conv_act)())
-        if dropout is not None: _conv.append(nn.Dropout(p=dropout))
-            
-        return nn.Sequential(*_conv)
-                  
     def build(self, in_channels=0, hidden=0, out_channels=0, depth=2, dropout=.2,
               pooling='global_mean_pool', activation='ReLU', normal='LayerNorm',
               convolution='SAGEConv', conv_act='ReLU', data_keys=['x'], edge_attr=[], 
@@ -219,37 +174,23 @@ class GraphNet(GModel):
 
         """ffn_param={'in_channels': 0, 'hidden': 0, 'out_channels': 0, 'activation': 'ReLU'}
         """
-
         self.data_keys = data_keys
         self.edge_attr = edge_attr
         
-        self.layers = []    
-        self.layers.append(self.conv_unit(in_channels, hidden, convolution=convolution, 
-                                          conv_act=conv_act, dropout=dropout, normal=normal,
-                                          norm_param=norm_param, layer_param=layer_param))
-        for d in range(depth-2):
-            self.layers.append(self.conv_unit(hidden, hidden, convolution=convolution, 
-                                          conv_act=conv_act, dropout=dropout, normal=normal,
-                                          norm_param=norm_param, layer_param=layer_param))
-        self.layers.append(self.conv_unit(hidden, out_channels, convolution=convolution, 
-                                          conv_act=None, dropout=None, normal=None,
-                                          norm_param=norm_param, layer_param=layer_param))
+        self.layers = []
+
+        self.layers.append(self.gonv_unit(in_channels, hidden, convolution=convolution, 
+                                            conv_act=conv_act, dropout=dropout, normal=normal,
+                                              norm_param=norm_param, layer_param=layer_param))
+        if depth != 1:
+            for d in range(depth-2):
+                self.layers.append(self.gonv_unit(hidden, hidden, convolution=convolution, 
+                                                    conv_act=conv_act, dropout=dropout, normal=normal,
+                                                        norm_param=norm_param, layer_param=layer_param))
+            self.layers.append(self.gonv_unit(hidden, out_channels, convolution=convolution, 
+                                                conv_act=None, dropout=None, normal=None,
+                                                    norm_param=norm_param, layer_param=layer_param))
         
-        if pooling is not None:
-            self.pooling = getattr(pool, pooling)
-        else: 
-            self.pooling = None
-
-        if activation is not None:
-            self.activation = getattr(nn, activation)()
-        else:
-            self.activation = None
-            
-        if ffn_param is not None:
-            self.ffnet = FFNet(ffn_param)
-        else:
-            self.ffnet = None
-
         print('GraphNet {} loaded...'.format(convolution))
                             
         
@@ -258,23 +199,25 @@ class GraphNetVariationalEncoder(GModel):
     https://arxiv.org/abs/1611.07308
     """
     
-    def build(self, in_channels, hidden, out_channels, depth, 
-                      convolution='GCNConv', pooling=None, **kwargs):
+    def build(self, in_channels=0, hidden=0, out_channels=0, convolution='GCNConv'):
         
-        self.gnet = GraphNet({'in_channels':in_channels, 'hidden':hidden, 'out_channels':hidden, 
-                              'convolution':convolution, 'depth':depth, 'pooling':pooling, **kwargs})
-        self.mu = self.ff_unit(hidden, hidden, activation=None, norm=False, dropout=None)
-        self.logstd = self.ff_unit(hidden, hidden, activation=None, norm=False, dropout=None)
+        self.conv1 = GraphNet({'in_channels': in_channels, 'hidden': hidden, 'depth': 1, 
+                               'activation': None, 'convolution': convolution, 
+                               'dropout': None, 'normal': None, 'conv_act': None})
+        self.conv2 = GraphNet({'in_channels': hidden, 'hidden': out_channels, 'depth': 1, 
+                               'activation': None, 'convolution': convolution, 
+                               'dropout': None, 'normal': None, 'conv_act': None})
+
         print('GraphNetVariationalEncoder loaded...')
 
     def forward(self, data):
-        z = self.gnet(data)
-        mu = self.mu(z)
-        logstd = self.logstd(z)
-
+ 
+        z = self.conv1(data.x, edge_index=data.edge_index, batch=data.batch)
+        mu = self.conv2(z, edge_index=data.edge_index, batch=data.batch)
+        logstd = self.conv2(z, edge_index=data.edge_index, batch=data.batch)
         #reparametrize
         if self.training:
-            mu = mu + randn_like(logstd) * exp(logstd)
+            z = mu + randn_like(logstd) * exp(logstd)
 
         return z, mu, logstd
         
@@ -366,8 +309,62 @@ class EncoderLoss():
             loss = recon_loss + kl_loss
 
         return loss, y_pred, y
+
+
+class PygModel(nn.Module):
+    """
+    A PyG model wrapper
+    
+    model_name = 'ModelName'
+    pooling = 'global_mean' / None
+    softmax = True/False
+    pyg_param = {'in_channels': int,
+                 'hidden_channels': int,
+                 'num_layers': int,
+                 'out_channels': int,
+                 'dropout': float,
+                 'norm': None}
+    ffn_param = {'in_channels': int,
+                 'hidden': int,
+                 'out_channels': int,
+                 'dropout': float,
+                 'activation': str}
+    """
+    
+    def __init__(self, model_param):
+        super().__init__()
         
+        launcher = getattr(pygmodels, model_param['model_name'])
+        self.model = launcher(**model_param['pyg_param'])
+
+        if 'pooling' in model_param and model_param['pooling'] is not None:
+            self.pooling = getattr(pool, model_param['pooling'])
+        else: self.pooling = None
             
+        if 'ffn_param' in model_param and model_param['ffn_param'] is not None:
+            self.ffnet = FFNet(model_param['ffn_param'])
+        else: self.ffnet = None
+            
+        if 'softmax' in model_param and model_param['softmax'] is True:
+            self.softmax = softmax
+        else: self.softmax = False
+        
+        print('pytorch geometric model {} loaded...'.format(model_param['model_name']))
+        
+    def forward(self, data):
+
+        x = self.model(data.x, data.edge_index)
+        
+        if self.pooling is not None:
+            x = self.pooling(x, data.batch)
+            
+        if self.ffnet is not None:
+            x = self.ffnet(x)  
+            
+        if self.softmax: 
+            x = F.log_softmax(x, dim=1)
+            
+        return x          
         
             
             
