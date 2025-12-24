@@ -23,6 +23,11 @@ class GModel(CModel):
     def __init__(self, model_param):
         super().__init__(model_param)
 
+        if 'edge_attr' in model_param:
+            self.edge_attr = model_param['edge_attr']
+        else: 
+            self.edge_attr = []
+
         if 'pooling' in model_param and model_param['pooling'] is not None:
             self.pooling = getattr(pool, model_param['pooling'])
         else: 
@@ -44,14 +49,17 @@ class GModel(CModel):
         self.data_keys = []
         raise NotImplementedError('subclass and implement build()...')
 
-    def forward(self, data=None, batch=None, edge_index=None, edge_attr=None):
+    def forward(self, data):
         """
         Data.feature = array
+        Data['feature'] = array
+
+        data must be passed as a Data object (not dict) if a layer requires the batch parameter
         """
-        X = []
-        filter_keys = [] # keys not to be included or already included
+        filter_keys = ['edge_index'] # keys not to be included or already included
         if self.y is not None: filter_keys.append(self.y)
-            
+        edge_attr = []
+        x = []    
         # if any features are to be embedded, embed them, add keys to filter
         if self.embed_param is not None:
             embedded_dict = self.embed_features(data)
@@ -61,27 +69,36 @@ class GModel(CModel):
                 else:
                     x.append(embed)
                 filter_keys.append(e)
-
-        if edge_attr is None and len(self.edge_attr) > 0:
-            edge_attr = []
+        # collect the edge attributes (if any) and concatenate them
+        if len(self.edge_attr) > 0:
             for j in self.edge_attr:
                 if j not in filter_keys:
-                    edge_attr.append(getattr(data, j))
+                    if type(data) == dict:
+                        edge_attr.append(data[j])
+                    else:
+                        edge_attr.append(getattr(data, j))
             edge_attr = cat(edge_attr, dim=1)
-
+        # collect the continuous features and concat them to any embedded features already collected
+        # pick out the batch and edge_index features if exist
         if type(data) == dict:
-            for k in data.keys(): 
+            for k in data.keys():
+                if k == 'edge_index':
+                    edge_index = data['edge_index']
                 if k not in filter_keys:
-                    X.append(data[k])
-            if len(x) != 0: x = cat(x, dim=-1) 
+                    x.append(data[k])      
+            if len(x) != 0: x = cat(x, dim=-1)
+                
         elif self.data_keys is not None and all(hasattr(data, dk) for dk in self.data_keys):
             for k in self.data_keys:
                 if k not in filter_keys:
                     x.append(getattr(data, k))
             if len(x) != 0: x = cat(x, dim=-1)
+            edge_index = getattr(data, 'edge_index', None)
         else:
             x = data
-        
+
+        batch = getattr(data, 'batch', None)
+        # route the data to the layers
         for l in self.layers: 
             if hasattr(l, 'forward'):
                 # inspect the forward() of the layer inorder to route inputs
@@ -90,31 +107,29 @@ class GModel(CModel):
                     for s in l:
                         fwd_param = inspect.signature(s.forward).parameters
                         if 'x' and 'batch' in fwd_param: 
-                            x = s(x, batch=data.batch if batch is None else batch)
+                            x = s(x, batch=batch)
                         elif 'x' and 'edge_index' and 'edge_attr' in fwd_param:
-                            x = s(x, edge_index=data.edge_index if edge_index is None else edge_index,
-                                  edge_attr=edge_attr)
+                            x = s(x, edge_index=edge_index, edge_attr=edge_attr)
                         elif 'x' and 'edge_index' in fwd_param:
-                            x = s(x, edge_index=data.edge_index if edge_index is None else edge_index)
+                            x = s(x, edge_index=edge_index)
                         elif 'x' in fwd_param:
                             x = s(x)
                         else:
                             pass
                 else:        
                     if 'x' and 'batch' in fwd_param:
-                        x = l(x, batch=data.batch if batch is None else batch)
+                        x = l(x, batch=batch)
                     elif 'x' and 'edge_index' and 'edge_attr' in fwd_param:
-                        x = l(x, edge_index=data.edge_index if edge_index is None else edge_index,
-                              edge_attr=edge_attr)
+                        x = l(x, edge_index=edge_index, edge_attr=edge_attr)
                     elif 'x' and 'edge_index' in fwd_param:
-                        x = l(x, edge_index=data.edge_index if edge_index is None else edge_index)
+                        x = l(x, edge_index=edge_index)
                     elif 'x' in fwd_param:
                         x = l(x)
                     else:
                         pass  
                         
         if self.pooling is not None:
-            x = self.pooling(x, batch=data.batch if batch is None else batch)
+            x = self.pooling(x, batch=batch)
         if self.activation is not None:
             x = self.activation(x)
         if self.ffnet is not None:
