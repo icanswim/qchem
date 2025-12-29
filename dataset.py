@@ -468,13 +468,13 @@ class QM9(QDataset):
             else:
                 _out = getattr(data, f)
                 
-                if hasattr(_out, 'ndim') and _out.ndim == 3: #if multiple conformations
+                if hasattr(_out, 'ndim') and _out.ndim == 3: # if multiple conformations
                     out = _out[:,:,ci]
                 else:
                     out = _out
    
             if f in self.transforms:
-                transforms = self.transforms[f] #get the list of transforms for this feature
+                transforms = self.transforms[f] # get the list of transforms for this feature
                 for T in transforms:
                     out = T(out)
                     
@@ -509,14 +509,14 @@ class QM9(QDataset):
             self.inconsistant = []
 
             for filename in sorted(os.listdir(in_dir)):
-                if filename.endswith('.xyz'): #create the molecule
+                if filename.endswith('.xyz'): # create the molecule
                     datadic[int(filename[-10:-4])] = QM9Mol(in_dir+filename, n_conformers)
                     scanned += 1
-                    #check conformations exist
+                    # check conformations exist
                     if not datadic[int(filename[-10:-4])].rdmol.GetNumConformers() >= n_conformers:
                         self.no_conf.append(filename[-10:-4])
                         del datadic[int(filename[-10:-4])]
-                    #filter the molecule
+                    # filter the molecule
                     elif filter_on is not None: 
                         val = self._get_features(datadic[int(filename[-10:-4])], 
                                                      [filter_on[0]])
@@ -530,7 +530,7 @@ class QM9(QDataset):
 
                 if len(datadic) > n - 1:
                     break
-            #check for known false molecules
+            # check for known false molecules
             self.unchar = []
             uncharacterized = self.get_uncharacterized()
             for mol in uncharacterized: 
@@ -567,11 +567,11 @@ class QM9(QDataset):
 class QM9_seq(QM9):
 
     def load_data(self, prompt=None, tokenizer=SmileReTokenizer, vocab={}, transforms={}, **kwargs):
-        #encoding and decode used by transformer Metrics
+        # encoding and decode used by transformer Metrics
         self.encoding = Encode(vocab=vocab, pad_token='[PAD]')
         self.prompt = prompt
-        #QM9 has a feature 'tokens' which are tokenized smiles
-        #the tokenizer is used in inference
+        # QM9 has a feature 'tokens' which are tokenized smiles
+        # the tokenizer is used in inference
         self.tokenizer = tokenizer() 
 
         if prompt == None:
