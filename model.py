@@ -49,7 +49,7 @@ class GModel(CModel):
         self.data_keys = []
         raise NotImplementedError('subclass and implement build()...')
 
-    def forward(self, data):
+    def forward(self, data, edge_index=None, edge_attr=None, **kwargs):
         """
         Data.feature = array
         Data['feature'] = array
@@ -196,19 +196,20 @@ class GraphNet(GModel):
 
         self.layers.append(self.gonv_unit(in_channels, hidden, convolution=convolution, 
                                             conv_act=conv_act, dropout=dropout, normal=normal,
-                                              norm_param=norm_param, layer_param=layer_param))
+                                            norm_param=norm_param, layer_param=layer_param))
         if depth != 1:
             for d in range(depth-2):
                 self.layers.append(self.gonv_unit(hidden, hidden, convolution=convolution, 
                                                     conv_act=conv_act, dropout=dropout, normal=normal,
-                                                        norm_param=norm_param, layer_param=layer_param))
+                                                    norm_param=norm_param, layer_param=layer_param))
             self.layers.append(self.gonv_unit(hidden, out_channels, convolution=convolution, 
                                                 conv_act=None, dropout=None, normal=None,
-                                                    norm_param=norm_param, layer_param=layer_param))
+                                                norm_param=norm_param, layer_param=layer_param))
         
         print('GraphNet {} loaded...'.format(convolution))
-                            
-        
+
+                                    
+    
 class GraphNetVariationalEncoder(GModel):
     """https://pytorch-geometric.readthedocs.io/en/2.5.2/_modules/torch_geometric/nn/models/autoencoder.html
     https://arxiv.org/abs/1611.07308
@@ -226,8 +227,8 @@ class GraphNetVariationalEncoder(GModel):
         print('GraphNetVariationalEncoder loaded...')
 
     def forward(self, data):
- 
-        z = self.conv1(data.x, edge_index=data.edge_index, batch=data.batch)
+
+        z = self.conv1(data)
         mu = self.conv2(z, edge_index=data.edge_index, batch=data.batch)
         logstd = self.conv2(z, edge_index=data.edge_index, batch=data.batch)
         #reparametrize

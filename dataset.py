@@ -342,14 +342,15 @@ class QM9Mol(Molecule):
 class QDataset(CDataset):
     """Quantum Dataset
     """
-    def __init__(self, criterion=None, conformation=None, n_conformers=0, **kwargs):
+    def __init__(self, criterion=None, conformation=None, n_conformers=0, dict2data=False, **kwargs):
         self.criterion = criterion
         self.conformation = conformation
         self.n_conformers = n_conformers
+        self.dict2data = dict2data
         super().__init__(**kwargs)
         print('QDataset created...')
 
-    def __getitem__(self, i):         
+    def __getitem__(self, i):  
 
         if self.input_dict == None:
             return self.ds[i]
@@ -458,7 +459,7 @@ class QM9(QDataset):
                        129158,130535,6620,59818]
 
     vocab = Molecule.vocab
-    
+
     def _get_features(self, data, features, ci=0):
         """load, transform then concatenate selected features"""
         output = []
@@ -491,12 +492,9 @@ class QM9(QDataset):
                 data.append(line)
             return data
         
-    def load_data(self, in_dir='./data/qm9/dsgdb9nsd.xyz/', n=133885, filter_on=None, 
-                  use_pickle=False, dtype='float32', n_conformers=0, dict2data=False, **kwargs):
+    def load_data(self, in_dir='./data/qm9/dsgdb9nsd.xyz/', n=133885, 
+                    use_pickle=False, filter_on=None, dtype='float32', **kwargs):
 
-        self.n_conformers = n_conformers
-        self.dict2data = dict2data
-        
         if use_pickle and os.path.exists('./data/qm9/'+use_pickle):
             print('loading QM9 datadic from a pickled copy...')
             with open('./data/qm9/'+use_pickle, 'rb') as f:
@@ -510,10 +508,10 @@ class QM9(QDataset):
 
             for filename in sorted(os.listdir(in_dir)):
                 if filename.endswith('.xyz'): # create the molecule
-                    datadic[int(filename[-10:-4])] = QM9Mol(in_dir+filename, n_conformers)
+                    datadic[int(filename[-10:-4])] = QM9Mol(in_dir+filename, self.n_conformers)
                     scanned += 1
                     # check conformations exist
-                    if not datadic[int(filename[-10:-4])].rdmol.GetNumConformers() >= n_conformers:
+                    if not datadic[int(filename[-10:-4])].rdmol.GetNumConformers() >= self.n_conformers:
                         self.no_conf.append(filename[-10:-4])
                         del datadic[int(filename[-10:-4])]
                     # filter the molecule
@@ -565,12 +563,19 @@ class QM9(QDataset):
 
 
 class QM9_seq(QM9):
+    """
+    QM9 wrapper sequence dataset
+    
+    returns 
+    {'tokens': tokens, 'y': y, 'position': pos} or 
+    {'tokens': prompt}
+    """
 
     def load_data(self, prompt=None, tokenizer=SmileReTokenizer, vocab={}, transforms={}, **kwargs):
         # encoding and decode used by transformer Metrics
         self.encoding = Encode(vocab=vocab, pad_token='[PAD]')
         self.prompt = prompt
-        # QM9 has a feature 'tokens' which are tokenized smiles
+
         # the tokenizer is used in inference
         self.tokenizer = tokenizer() 
 
@@ -582,9 +587,9 @@ class QM9_seq(QM9):
             return {'tokens': prompt}
             
     def __getitem__(self, i):
-        
+
         if self.prompt == None:
-            data = super().__getitem__(i)  
+            data = super().__getitem__(i)
         else:
             _data = self.ds
             data = {}
