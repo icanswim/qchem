@@ -49,7 +49,7 @@ class Learn(Learn):
             y_pred = self.model(data)
             
             if flag == 'infer':
-                self.metrics.predictions.append(y_pred)
+                self.metric.predictions.append(y_pred)
                 y = None
             else:
                 # variation from cosmosis.learning.Learn()
@@ -63,12 +63,12 @@ class Learn(Learn):
                 else:
                     b_loss = self.criterion(y_pred, y)
                     
-                self.metrics.e_loss += b_loss.item()
-                self.metrics.n += self.bs
+                self.metric.e_loss += b_loss.item()
+                self.metric.n += self.bs
                 
-                if self.metrics.metric_func is not None: 
-                    self.metrics.y.append(y)
-                    self.metrics.y_pred.append(y_pred)
+                if self.metric.metric_func is not None: 
+                    self.metric.y.append(y)
+                    self.metric.y_pred.append(y_pred)
                     
                 if flag == 'train':
                     b_loss.backward()
@@ -77,11 +77,11 @@ class Learn(Learn):
                         self.criterion.discriminator.reset_parameters()
                 # end of variation
         if flag == 'val': 
-            self.scheduler.step(self.metrics.e_loss)
-            self.metrics.lr_log.append(self.opt.param_groups[0]['lr'])
+            self.scheduler.step(self.metric.e_loss)
+            self.metric.lr.append(self.opt.param_groups[0]['lr'])
             
-        self.metrics.metric(flag)
-        self.metrics.loss(flag)
-        self.metrics.report(y_pred, y, flag)
-        self.metrics.reset_loop()
+        self.metric.metric(flag)
+        self.metric.loss(flag)
+        self.metric.report(y_pred, y, flag)
+        self.metric.reset_loop()
                 

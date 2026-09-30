@@ -366,28 +366,31 @@ class QDataset(CDataset):
         else:
             return Data.from_dict(datadic)
 
-    def _get_conformation_index(self, datadic):
+    def _get_conformation_index(self, molecule):
         """each molecular formula (mol) may have many different isomers
-        select the conformation based on some criterion (attribute value)
+        select the conformation based on some criterion (attribute value) or
+        by index value
         """
         if self.n_conformers <= 1:
             return 0
         
         if self.criterion is None:
-            self.criterion = self.input_dict['y']
-        
+            criterion = self.input_dict['y'][0]
+        else:
+            criterion = self.criterion[0]
+
         if self.conformation == None: 
             self.conformation = 'random'
-            
+
         if isinstance(self.conformation, int):
             ci = self.conformation
         elif self.conformation == 'random':
-            ci = random.randrange(datadic[self.criterion].shape[0])
+            ci = random.randrange(getattr(molecule, criterion).shape[0])
         elif self.conformation == 'max':
-            ci = np.argmax(datadic[self.criterion], axis=0)
+            ci = np.argmax(getattr(molecule, criterion), axis=0)
         elif self.conformation == 'min':
-            ci = np.argmin(datadic[self.criterion], axis=0)
-            
+            ci = np.argmin(getattr(molecule, criterion), axis=0)
+
         return ci
 
         
