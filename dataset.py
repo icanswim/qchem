@@ -1,3 +1,4 @@
+from fileinput import filename
 import sys # required for relative imports in jupyter lab
 sys.path.insert(0, '../')
 
@@ -6,7 +7,7 @@ import re
 from cosmosis.dataset import CDataset, Encode
 
 from abc import abstractmethod
-import os, re, random, h5py, logging
+import os, re, random, h5py, logging, operator
 
 import numpy as np
 
@@ -325,14 +326,14 @@ class QM9Mol(Molecule):
         self.embed_rdmol(self.rdmol, n_conformers)
         
         if self.rdmol.GetNumConformers() == 0 or self.rdmol.GetNumConformers() != n_conformers:
-            #use QM9 hardcopy data
+            # use QM9 hardcopy data
             self.xyz = np.expand_dims(self.qm9_xyz, axis=-1) # (n_atom,xyz,n_conformation)
             self.distance = self.distance_from_xyz(self.xyz)
             self.atom_type = self.qm9_atom_type
             self.n_atoms = self.qm9_n_atoms
             self.atomic_number = self.qm9_atomic_number
         else:
-            #use rdkit data
+            # use rdkit data
             self.xyz = self.xyz_from_rdmol(self.rdmol)            
             self.distance = self.distance_from_rdmol(self.rdmol)
             
@@ -342,10 +343,19 @@ class QM9Mol(Molecule):
 class QDataset(CDataset):
     """Quantum Dataset
     """
-    def __init__(self, criterion=None, conformation=None, n_conformers=0, dict2data=False, **kwargs):
+    OPERATORS = {
+        '<': operator.lt,
+        '<=': operator.le,
+        '>': operator.gt,
+        '>=': operator.ge,
+        '==': operator.eq,
+        '!=': operator.ne
+    }
+
+    def __init__(self, criterion=None, conformation=None, dict2data=False, **kwargs):
         self.criterion = criterion
         self.conformation = conformation
-        self.n_conformers = n_conformers
+        self.n_conformers = kwargs.get('n_conformers', 0)
         self.dict2data = dict2data
         super().__init__(**kwargs)
         logger.info('QDataset created...')
@@ -392,6 +402,25 @@ class QDataset(CDataset):
             ci = np.argmin(getattr(molecule, criterion), axis=0)
 
         return ci
+
+    def filter_on(self, molecule, filter_on):
+        """filter_on = (feature, operator, target_value)
+        used to filter molecules based on the specified feature, operator, and target value
+        """
+        feature = filter_on[0]
+        operator = filter_on[1]
+        target_val = float(filter_on[2])
+
+        val = self._get_features(molecule, [feature])       
+        comparison_func = QDataset.OPERATORS.get(operator)
+
+        if comparison_func:
+            # if condition is not met, return False
+            if not comparison_func(val, target_val):
+                return False
+        else:
+            raise ValueError(f"Unsupported operator: {operator}")
+        return True
 
         
 class QM9(QDataset):
@@ -458,6 +487,7 @@ class QM9(QDataset):
     n_conformers = int (number of rdkit conforming geometry to create, uses stored qm9 database 
         conformation if 0)
     """
+
     LOW_CONVERGENCE = [21725,87037,59827,117523,128113,129053,129152, 
                        129158,130535,6620,59818]
 
@@ -504,8 +534,9 @@ class QM9(QDataset):
             print('creating QM9 dataset...')
             datadic = {}
             scanned = 0
-            self.no_conf = []
+            self.no_conformation = []
             self.inconsistant = []
+            self.uncharacterized = []
 
             for filename in sorted(os.listdir(dir+'/'+in_file)):
                 if filename.endswith('.xyz'): # create the molecule
@@ -513,15 +544,12 @@ class QM9(QDataset):
                                                             n_conformers=n_conformers)
                     scanned += 1
                     # check conformations exist
-                    if not datadic[int(filename[-10:-4])].rdmol.GetNumConformers() >= self.n_conformers:
-                        self.no_conf.append(filename[-10:-4])
+                    if not datadic[int(filename[-10:-4])].rdmol.GetNumConformers() >= n_conformers:
+                        self.no_conformation.append(filename[-10:-4])
                         del datadic[int(filename[-10:-4])]
-                    # filter the molecule
-                    elif filter_on is not None: 
-                        val = self._get_features(datadic[int(filename[-10:-4])], 
-                                                     [filter_on[0]])
-                        val = np.array2string(val, precision=4, floatmode='maxprec')[1:-1]
-                        if not eval(val+filter_on[1]+filter_on[2]):
+                    else:
+                        # filter the molecule
+                        if not self.filter_on(datadic[int(filename[-10:-4])], filter_on):
                             del datadic[int(filename[-10:-4])]
 
                 if scanned % 10000 == 1:
@@ -531,17 +559,16 @@ class QM9(QDataset):
                 if len(datadic) > n - 1:
                     break
             # check for known false molecules
-            self.unchar = []
-            uncharacterized = self.get_uncharacterized()
-            for mol in uncharacterized: 
+            unchar = self.get_uncharacterized()
+            for mol in unchar: 
                 if mol in datadic:
                     del datadic[mol]
-                    self.unchar.append(mol)
+                    self.uncharacterized.append(mol)
                     
-            print('total molecules scanned: ', scanned)
-            print('total uncharacterized molecules removed: ', len(self.unchar))
-            print('total molecules removed for insuffient rdmol conformations: ', len(self.no_conf))
-            print('total molecules created: ', len(datadic))
+            logger.info(f'total molecules scanned: {scanned}')
+            logger.info(f'total uncharacterized molecules removed: {len(self.uncharacterized)}')
+            logger.info(f'total molecules removed for insuffient rdmol conformations: {len(self.no_conformation)}')
+            logger.info(f'total molecules created: {len(datadic)}')
             
             if use_pickle and not os.path.exists(f'{dir}/{use_pickle}'):
                 self.pickle_data(datadic, in_file=f'{dir}/{use_pickle}')
