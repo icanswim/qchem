@@ -185,7 +185,7 @@ class GraphNet(GModel):
     def build(self, in_channels=0, hidden=0, out_channels=0, depth=2, dropout=.2,
               pooling='global_mean_pool', activation='ReLU', normal='LayerNorm',
               convolution='SAGEConv', conv_act='ReLU', data_keys=['x'], edge_attr=[], 
-              layer_param={}, norm_param={}, ffn_param=None, embed_param=None):
+              layer_param={}, norm_param={}, ffn_param=None, embed_param=None, **kwargs):
 
         """ffn_param={'in_channels': 0, 'hidden': 0, 'out_channels': 0, 'activation': 'ReLU'}
         """
@@ -231,7 +231,7 @@ class GraphNetVariationalEncoder(GModel):
         z = self.conv1(data)
         mu = self.conv2(z, edge_index=data.edge_index, batch=data.batch)
         logstd = self.conv2(z, edge_index=data.edge_index, batch=data.batch)
-        #reparametrize
+        # reparametrize
         if self.training:
             z = mu + randn_like(logstd) * exp(logstd)
 
@@ -340,11 +340,11 @@ class PygModel(nn.Module):
                  'out_channels': int,
                  'dropout': float,
                  'norm': None}
-    ffn_param = {'in_channels': int,
+    ffn_param = {'model_name': 'funnel',
+                 'in_channels': int,
                  'hidden': int,
                  'out_channels': int,
-                 'dropout': float,
-                 'activation': str}
+                 'activation': 'ReLU'}
     """
     
     def __init__(self, model_param):
@@ -362,8 +362,8 @@ class PygModel(nn.Module):
         else: self.ffnet = None
             
         if 'softmax' in model_param and model_param['softmax'] is True:
-            self.softmax = softmax
-        else: self.softmax = False
+            self.softmax = True
+        else: self.softmax = None
         
         print('pytorch geometric model {} loaded...'.format(model_param['model_name']))
         
@@ -371,10 +371,10 @@ class PygModel(nn.Module):
 
         x = self.model(data.x, data.edge_index)
         
-        if self.pooling is not None:
+        if self.pooling:
             x = self.pooling(x, data.batch)
             
-        if self.ffnet is not None:
+        if self.ffnet:
             x = self.ffnet(x)  
             
         if self.softmax: 

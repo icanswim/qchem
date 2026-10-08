@@ -6,7 +6,7 @@ import re
 from cosmosis.dataset import CDataset, Encode
 
 from abc import abstractmethod
-import os, re, random, h5py, pickle
+import os, re, random, h5py, logging
 
 import numpy as np
 
@@ -24,7 +24,7 @@ from rdkit.Chem import AllChem
 from torch import cat as torch_cat
 from torch import is_tensor, as_tensor
 
-
+logger = logging.getLogger(__name__)
 
 class SmileReTokenizer():
     """tokenize smiles using a regular expression pattern 
@@ -348,7 +348,7 @@ class QDataset(CDataset):
         self.n_conformers = n_conformers
         self.dict2data = dict2data
         super().__init__(**kwargs)
-        print('QDataset created...')
+        logger.info('QDataset created...')
 
     def __getitem__(self, i):  
 
@@ -377,7 +377,7 @@ class QDataset(CDataset):
         if self.criterion is None:
             criterion = self.input_dict['y'][0]
         else:
-            criterion = self.criterion[0]
+            criterion = self.criterion
 
         if self.conformation == None: 
             self.conformation = 'random'
@@ -495,13 +495,11 @@ class QM9(QDataset):
                 data.append(line)
             return data
         
-    def load_data(self, in_dir='./data/qm9/dsgdb9nsd.xyz/', n=133885, 
-                    use_pickle=False, filter_on=None, dtype='float32', **kwargs):
+    def load_data(self, dir='./data/qm9', in_file='dsgdb9nsd.xyz', n=133885, 
+                    use_pickle=False, filter_on=None, dtype='float32', n_conformers=0):
 
-        if use_pickle and os.path.exists('./data/qm9/'+use_pickle):
-            print('loading QM9 datadic from a pickled copy...')
-            with open('./data/qm9/'+use_pickle, 'rb') as f:
-                datadic = pickle.load(f)
+        if use_pickle and os.path.exists(f'{dir}/{use_pickle}'):
+            return self.load_pickle(in_file=f'{dir}/{use_pickle}')   
         else:
             print('creating QM9 dataset...')
             datadic = {}
@@ -509,9 +507,10 @@ class QM9(QDataset):
             self.no_conf = []
             self.inconsistant = []
 
-            for filename in sorted(os.listdir(in_dir)):
+            for filename in sorted(os.listdir(dir+'/'+in_file)):
                 if filename.endswith('.xyz'): # create the molecule
-                    datadic[int(filename[-10:-4])] = QM9Mol(in_dir+filename, self.n_conformers)
+                    datadic[int(filename[-10:-4])] = QM9Mol(in_file=dir+'/'+in_file+'/'+filename,
+                                                            n_conformers=n_conformers)
                     scanned += 1
                     # check conformations exist
                     if not datadic[int(filename[-10:-4])].rdmol.GetNumConformers() >= self.n_conformers:
@@ -544,9 +543,8 @@ class QM9(QDataset):
             print('total molecules removed for insuffient rdmol conformations: ', len(self.no_conf))
             print('total molecules created: ', len(datadic))
             
-            if use_pickle:
-                with open('./data/qm9/'+use_pickle, 'wb') as f:
-                    pickle.dump(datadic, f)
+            if use_pickle and not os.path.exists(f'{dir}/{use_pickle}'):
+                self.pickle_data(datadic, in_file=f'{dir}/{use_pickle}')
         
         return datadic
     
@@ -878,7 +876,7 @@ class QM7X(QDataset, Molecule):
                   'distance','coulomb']
 
     def __getitem__(self, i):         
-        #if multiple conformations one is randomly selected
+        # if multiple conformations one is randomly selected
         conformations = list(self.ds[i].keys())
         idconf = random.choice(conformations)
         datadic = {}
