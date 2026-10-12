@@ -407,6 +407,8 @@ class QDataset(CDataset):
         """filter_on = (feature, operator, target_value)
         used to filter molecules based on the specified feature, operator, and target value
         """
+        if filter_on is None:
+            return True
         feature = filter_on[0]
         operator = filter_on[1]
         target_val = float(filter_on[2])
@@ -599,7 +601,7 @@ class QM9_seq(QM9):
     {'tokens': prompt}
     """
 
-    def load_data(self, prompt=None, tokenizer=SmileReTokenizer, vocab={}, transforms={}, **kwargs):
+    def load_data(self, prompt=None, tokenizer=SmileReTokenizer, vocab={}, **kwargs):
         # encoding and decode used by transformer Metrics
         self.encoding = Encode(vocab=vocab, pad_token='[PAD]')
         self.prompt = prompt
@@ -608,12 +610,12 @@ class QM9_seq(QM9):
         self.tokenizer = tokenizer() 
 
         if prompt == None:
-            return super().load_data(transforms=transforms, **kwargs)
+            return super().load_data(**kwargs)
         else:
             self.ds_idx = [0]
             prompt = self.tokenizer(prompt)
             return {'tokens': prompt}
-            
+
     def __getitem__(self, i):
 
         if self.prompt == None:
