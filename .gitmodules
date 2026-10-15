@@ -1,0 +1,3 @@
+[submodule "cosmosis"]
+	path = cosmosis
+	url = https://github.com/icanswim/cosmosis.git
