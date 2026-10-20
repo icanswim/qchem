@@ -1,6 +1,3 @@
-import sys # required for relative imports in jupyter lab
-sys.path.insert(0, '../')
-
 from cosmosis.learning import Learn
 
 from model import EncoderLoss

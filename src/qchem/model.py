@@ -1,7 +1,3 @@
-import sys # required for relative imports in jupyter lab
-import inspect
-sys.path.insert(0, '../')
-
 from cosmosis.model import CModel, FFNet
 
 from torch import nn, log, mean, sum, exp, randn_like, matmul, Tensor, cat, sigmoid

@@ -1,11 +1,3 @@
-from fileinput import filename
-import sys # required for relative imports in jupyter lab
-sys.path.insert(0, '../')
-
-import re
-
-from cosmosis.dataset import CDataset, Encode
-
 from abc import abstractmethod
 import os, re, random, h5py, logging, operator
 
@@ -24,6 +16,8 @@ from rdkit.Chem import AllChem
 
 from torch import cat as torch_cat
 from torch import is_tensor, as_tensor
+
+from cosmosis.dataset import CDataset, Encode
 
 logger = logging.getLogger(__name__)
 
