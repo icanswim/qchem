@@ -520,11 +520,6 @@ dependencies = [
     { name = "torchvision" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "jupyterlab" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "matplotlib", specifier = ">=3.11.2" },
@@ -532,14 +527,11 @@ requires-dist = [
     { name = "pandas", specifier = ">=3.0.6" },
     { name = "scikit-learn", specifier = ">=1.9.1" },
     { name = "scipy", specifier = ">=1.18.1" },
-    { name = "torch", specifier = ">=2.14.1", index = "https://download.pytorch.org/whl/cu126" },
-    { name = "torchaudio", specifier = ">=2.11.0", index = "https://download.pytorch.org/whl/cu126" },
+    { name = "torch", specifier = ">=2.14.1", index = "https://download.pytorch.org/whl/cu126/" },
+    { name = "torchaudio", specifier = ">=2.11.0", index = "https://download.pytorch.org/whl/cu126/" },
     { name = "torcheval", specifier = ">=0.0.7" },
-    { name = "torchvision", specifier = ">=0.29.1", index = "https://download.pytorch.org/whl/cu126" },
+    { name = "torchvision", specifier = ">=0.29.1", index = "https://download.pytorch.org/whl/cu126/" },
 ]
-
-[package.metadata.requires-dev]
-dev = [{ name = "jupyterlab", specifier = ">=4.6.4" }]
 
 [[package]]
 name = "cuda-bindings"
@@ -2204,6 +2196,7 @@ name = "qchem"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "cosmosis" },
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "pandas" },
@@ -2218,23 +2211,28 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "ipykernel" },
+    { name = "jupyterlab" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "cosmosis", editable = "cosmosis" },
     { name = "matplotlib", specifier = ">=3.11.2" },
     { name = "numpy", specifier = ">=2.5.4" },
     { name = "pandas", specifier = ">=3.0.6" },
     { name = "scikit-learn", specifier = ">=1.9.1" },
     { name = "scipy", specifier = ">=1.18.1" },
-    { name = "torch", specifier = ">=2.14.1", index = "https://download.pytorch.org/whl/cu126" },
-    { name = "torchaudio", specifier = ">=2.11.0", index = "https://download.pytorch.org/whl/cu126" },
+    { name = "torch", specifier = ">=2.14.1", index = "https://download.pytorch.org/whl/cu126/" },
+    { name = "torchaudio", specifier = ">=2.11.0", index = "https://download.pytorch.org/whl/cu126/" },
     { name = "torcheval", specifier = ">=0.0.7" },
-    { name = "torchvision", specifier = ">=0.29.1", index = "https://download.pytorch.org/whl/cu126" },
+    { name = "torchvision", specifier = ">=0.29.1", index = "https://download.pytorch.org/whl/cu126/" },
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "ipykernel", specifier = ">=7.4.0" }]
+dev = [
+    { name = "ipykernel", specifier = ">=7.4.0" },
+    { name = "jupyterlab", specifier = ">=4.6.4" },
+]
 
 [[package]]
 name = "referencing"
@@ -2628,7 +2626,7 @@ wheels = [
 [[package]]
 name = "torch"
 version = "2.14.1+cu126"
-source = { registry = "https://download.pytorch.org/whl/cu126" }
+source = { registry = "https://download.pytorch.org/whl/cu126/" }
 dependencies = [
     { name = "cuda-bindings", marker = "python_full_version < '3.15' and sys_platform == 'linux'" },
     { name = "cuda-toolkit", extra = ["cublas", "cudart", "cufft", "cufile", "cupti", "curand", "cusolver", "cusparse", "nvrtc", "nvtx"], marker = "sys_platform == 'linux'" },
@@ -2670,7 +2668,7 @@ wheels = [
 [[package]]
 name = "torchaudio"
 version = "2.11.0+cu126"
-source = { registry = "https://download.pytorch.org/whl/cu126" }
+source = { registry = "https://download.pytorch.org/whl/cu126/" }
 wheels = [
     { url = "https://download-r2.pytorch.org/whl/cu126/torchaudio-2.11.0%2Bcu126-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:2ccbbe4555d17c6a7d9bddf76a9c608d6e4ed9b9ecb63cc02f4c4bcf4ae8f05b", upload-time = "2026-03-23T15:50:21Z" },
     { url = "https://download-r2.pytorch.org/whl/cu126/torchaudio-2.11.0%2Bcu126-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:fe8ba48c690cacc58087603c4d853580006e3d1c0ebe22c0d75f99a004bc981a", upload-time = "2026-03-23T15:50:21Z" },
@@ -2704,7 +2702,7 @@ wheels = [
 [[package]]
 name = "torchvision"
 version = "0.29.1+cu126"
-source = { registry = "https://download.pytorch.org/whl/cu126" }
+source = { registry = "https://download.pytorch.org/whl/cu126/" }
 dependencies = [
     { name = "numpy" },
     { name = "pillow" },
