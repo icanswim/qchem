@@ -1,6 +1,6 @@
 from cosmosis.learning import Learn
 
-from model import EncoderLoss
+from qchem.model import EncoderLoss
 
 class Learn(Learn):
     """Small variation from cosmosis.learning.Learn.run() to enable use of Encoderloss
