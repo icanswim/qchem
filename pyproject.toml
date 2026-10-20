@@ -28,6 +28,10 @@ explicit = true
 torch = { index = "pytorch-cu126" }
 torchvision = { index = "pytorch-cu126" }
 torchaudio = { index = "pytorch-cu126" }
+cosmosis = { path = "cosmosis", editable = true }
+
+[tool.uv]
+no-build-isolation-package = ["cosmosis"]
 
 [tool.uv.workspace]
 members = ["cosmosis"]
@@ -38,3 +42,8 @@ qchem = "qchem:main"
 [build-system]
 requires = ["uv_build>=0.13.1,<0.14.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.4.0",
+]
