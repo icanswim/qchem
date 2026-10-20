@@ -1,3 +1,5 @@
+import inspect
+
 from cosmosis.model import CModel, FFNet
 
 from torch import nn, log, mean, sum, exp, randn_like, matmul, Tensor, cat, sigmoid
