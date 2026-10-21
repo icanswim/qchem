@@ -1,28 +1,23 @@
-#instructions for setting up folders and conda environment
+#instructions for setting up repo and environment
 
-##create a new qchem conda environment and folders
-git clone https://github.com/icanswim/cosmosis.git
 git clone https://github.com/icanswim/qchem.git
 cd qchem
-mkdir data
-mkdir logs
-mkdir models
+
+##recommended uv environment
+uv sync
+uv run jupyter lab
+
+##conda environment
 conda env create -f environment.yml
 conda activate qchem
 pip install torcheval
 jupyter lab
 
 ##manual creation of conda environment and folders
-git clone https://github.com/icanswim/cosmosis.git
-git clone https://github.com/icanswim/qchem.git
-cd qchem
-mkdir data
-mkdir logs
-mkdir models
-conda create --name qchem
+conda create --name qchem python=3.12
 conda activate qchem
 conda config --add channels nvidia pytorch pyg conda-forge
-conda install pytorch torchvision torchaudio pytorch-cuda=12.1 rdkit pyg
+conda install pytorch torchvision torchaudio pytorch-cuda=12.6 rdkit pyg
 conda install matplotlib scipy pandas scikit-learn jupyterlab h5py git numpy
 pip install torcheval
 jupyter lab
