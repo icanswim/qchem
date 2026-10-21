@@ -90,8 +90,7 @@ jupyter lab
 ---
 
 ### Data Download and Prep
-> [!TIP]
-> See each individual dataset class **docstring** within `src/qchem/` for exact staging paths, source links, and specific data preprocessing pipeline instructions.
+> See each individual dataset class **docstring** within `src/qchem/dataset.py` for download and prep instructions
 
 ---
 
