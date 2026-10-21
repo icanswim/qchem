@@ -43,8 +43,138 @@ From *Machine Learning for Molecular Simulation*:
 
 22 directories
 ```
+---
+## Instructions for Setting Up Repo and Environment
+
+```bash
+git clone https://github.com/icanswim/qchem.git
+cd qchem
+```
 
 ---
+
+### Recommended: `uv` Environment
+
+```bash
+uv sync
+uv run jupyter lab
+```
+### Conda Environment
+
+```bash
+conda env create -f environment.yml
+conda activate qchem
+pip install torcheval
+jupyter lab
+```
+
+### Conda Environment (Manual Creation)
+
+```bash
+# Create and activate environment
+conda create --name qchem python=3.12 -y
+conda activate qchem
+
+# Add domain channels
+conda config --add channels nvidia pytorch pyg conda-forge
+
+# Install ML engines, CUDA packages, and data dependencies
+conda install pytorch torchvision torchaudio pytorch-cuda=12.6 rdkit pyg -y
+conda install matplotlib scipy pandas scikit-learn jupyterlab h5py git numpy -y
+
+# Install tracking metric utilities
+pip install torcheval
+jupyter lab
+```
+
+---
+
+### Data Download and Prep
+> [!TIP]
+> See each individual dataset class **docstring** within `src/qchem/` for exact staging paths, source links, and specific data preprocessing pipeline instructions.
+
+---
+
+## References
+
+* **ICLR 2021 Keynote: Geometric Deep Learning**  
+  [Video Presentation](https://youtu.be/w6Pw4MOzMuo)
+* **Geometric Deep Learning: Grids, Groups, Graphs, Geodesics, and Gauges**  
+  [arXiv:2104.13478](https://arxiv.org/abs/2104.13478)
+* **GeoMol: Torsional Geometric Generation of Molecular 3D Conformer Ensembles**  
+  [arXiv:2106.07802](https://arxiv.org/abs/2106.07802) | [GitHub Repository](https://github.com/PattanaikL/GeoMol)
+* **Learning Neural Generative Dynamics for Molecular Conformation Generation**  
+  [arXiv:2102.10240](https://arxiv.org/abs/2102.10240)
+* **Equivariant message passing for the prediction of tensorial properties and molecular spectra**  
+  [arXiv:2102.03150](https://arxiv.org/abs/2102.03150)
+* **Graph Neural Networks with Learnable Structural and Positional Representations**  
+  [arXiv:2110.07875](https://arxiv.org/abs/2110.07875) | [GitHub Repository](https://github.com/vijaydwivedi75/gnn-lspe)
+* **Physics-based Deep Learning**  
+  [arXiv:2109.05237](https://arxiv.org/abs/2109.05237)
+* **Everything is Connected: Graph Neural Networks**  
+  [arXiv:2301.08210](https://arxiv.org/abs/2301.08210)
+* **AlphaFold**  
+  [Nature Article](https://www.nature.com/articles/s41586-021-03819-2) | [GitHub Repository](https://github.com/deepmind/alphafold)
+* **Deep learning for molecular design - a review of the state of the art**  
+  [arXiv:1903.04388](https://arxiv.org/abs/1903.04388)
+* **Machine learning for molecular simulation**  
+  [arXiv:1911.02792](https://arxiv.org/abs/1911.02792)
+* **Machine learning for molecular and materials science**  
+  [ResearchGate Publication](https://www.researchgate.net/publication/326608140_Machine_learning_for_molecular_and_materials_science)
+* **Deep learning methods in protein structure prediction**  
+  [ScienceDirect Article](https://www.sciencedirect.com/science/article/pii/S2001037019304441)
+* **Machine learning for protein folding and dynamics**  
+  [arXiv:1911.09811](https://arxiv.org/abs/1911.09811)
+* **Graph Attention Networks**  
+  [arXiv:1710.10903](https://arxiv.org/abs/1710.10903) | [Video Explanation](https://youtu.be/8owQBFAHw7E)
+* **Learning to Simulate Complex Physics with Graph Networks**  
+  [arXiv:2002.09405](https://arxiv.org/abs/2002.09405) | [GitHub Repository](https://github.com/deepmind/deepmind-research/tree/master/learning_to_simulate)
+* **Set Transformer: A Framework for Attention-based Permutation-Invariant Neural Networks**  
+  [arXiv:1810.00825](https://arxiv.org/abs/1810.00825) | [GitHub Repository](https://github.com/juho-lee/set_transformer)
+* **Learning continuous and data-driven molecular descriptors by translating equivalent chemical representations**  
+  [RSC Publication](https://pubs.rsc.org/en/content/articlehtml/2019/sc/c8sc04175j)
+* **Machine Learning Force Fields**  
+  [arXiv:2010.07067](https://arxiv.org/abs/2010.07067)
+* **Unifying machine learning and quantum chemistry -- a deep neural network for molecular wavefunctions**  
+  [arXiv:1906.10033](https://arxiv.org/abs/1906.10033)
+* **Integrating Machine Learning with Physics-Based Modeling**  
+  [arXiv:2006.02619](https://arxiv.org/abs/2006.02619)
+* **Bypassing the Kohn-Sham equations with machine learning**  
+  [Nature Communications Article](https://www.nature.com/articles/s41467-017-00839-3)
+
+### Chemistry Machine Learning Libraries
+
+* **RDKit**  
+  [Official Documentation](https://www.rdkit.org/)
+* **PyG (PyTorch Geometric)**  
+  [Official Documentation](https://pytorch-geometric.readthedocs.io/en/latest/)
+* **SchNetPack: A Deep Learning Toolbox For Atomistic Systems**  
+  [arXiv:1809.01072](https://arxiv.org/abs/1809.01072) | [GitHub Repository](https://github.com/atomistic-machine-learning/schnetpack)
+* **Graph Networks as a Universal Machine Learning Framework for Molecules and Crystals**  
+  [arXiv:1812.05055](https://arxiv.org/abs/1812.05055) | [GitHub Repository](https://github.com/materialsvirtuallab/megnet)
+* **MoleculeNet: A Benchmark for Molecular Machine Learning**  
+  [arXiv:1703.00564](https://arxiv.org/abs/1703.00564) | [GitHub Repository](https://github.com/deepchem/deepchem)
+
+### Datasets
+
+* **Quantum-Machine.org**  
+  [Dataset Portal](http://quantum-machine.org/datasets/)
+* **GDB Databases**  
+  [Download Page](https://gdb.unibe.ch/downloads/)
+* **Alchemy: A Quantum Chemistry Dataset for Benchmarking AI Models**  
+  [arXiv:1906.09427](https://arxiv.org/abs/1906.09427) | [GitHub Repository](https://github.com/tencent-alchemy/Alchemy)
+* **QM7-X: A comprehensive dataset of quantum-mechanical properties spanning the chemical space of small organic molecules**  
+  [arXiv:2006.15139](https://arxiv.org/abs/2006.15139) | [Zenodo Repository](https://zenodo.org/record/3905361)
+* **The ANI-1ccx and ANI-1x data sets, coupled-cluster and density functional theory properties for molecules**  
+  [Nature Scientific Data Article](https://www.nature.com/articles/s41597-020-0473-z#Sec11)
+* **PyG Datasets**  
+  [Available Datasets Documentation](https://pytorch-geometric.readthedocs.io/en/latest/modules/datasets.html)
+* **Kaggle: Predict Molecular Properties**  
+  [CHAMPS Scalar Coupling Challenge](https://www.kaggle.com/c/champs-scalar-coupling)
+* **QMugs: Quantum Mechanical Properties of Drug-like Molecules**  
+  [arXiv:2107.00367](https://arxiv.org/abs/2107.00367) | [ETH Zürich Repository (DOI)](https://doi.org/10.3929/ethz-b-000482129)
+
+  ---
 
 ## Installed Packages
 
@@ -200,86 +330,6 @@ From *Machine Learning for Molecular Simulation*:
 | yarl | 1.25.1 | |
 
 ---
-
-## References
-
-* **ICLR 2021 Keynote: Geometric Deep Learning**  
-  [Video Presentation](https://youtu.be/w6Pw4MOzMuo)
-* **Geometric Deep Learning: Grids, Groups, Graphs, Geodesics, and Gauges**  
-  [arXiv:2104.13478](https://arxiv.org/abs/2104.13478)
-* **GeoMol: Torsional Geometric Generation of Molecular 3D Conformer Ensembles**  
-  [arXiv:2106.07802](https://arxiv.org/abs/2106.07802) | [GitHub Repository](https://github.com/PattanaikL/GeoMol)
-* **Learning Neural Generative Dynamics for Molecular Conformation Generation**  
-  [arXiv:2102.10240](https://arxiv.org/abs/2102.10240)
-* **Equivariant message passing for the prediction of tensorial properties and molecular spectra**  
-  [arXiv:2102.03150](https://arxiv.org/abs/2102.03150)
-* **Graph Neural Networks with Learnable Structural and Positional Representations**  
-  [arXiv:2110.07875](https://arxiv.org/abs/2110.07875) | [GitHub Repository](https://github.com/vijaydwivedi75/gnn-lspe)
-* **Physics-based Deep Learning**  
-  [arXiv:2109.05237](https://arxiv.org/abs/2109.05237)
-* **Everything is Connected: Graph Neural Networks**  
-  [arXiv:2301.08210](https://arxiv.org/abs/2301.08210)
-* **AlphaFold**  
-  [Nature Article](https://www.nature.com/articles/s41586-021-03819-2) | [GitHub Repository](https://github.com/deepmind/alphafold)
-* **Deep learning for molecular design - a review of the state of the art**  
-  [arXiv:1903.04388](https://arxiv.org/abs/1903.04388)
-* **Machine learning for molecular simulation**  
-  [arXiv:1911.02792](https://arxiv.org/abs/1911.02792)
-* **Machine learning for molecular and materials science**  
-  [ResearchGate Publication](https://www.researchgate.net/publication/326608140_Machine_learning_for_molecular_and_materials_science)
-* **Deep learning methods in protein structure prediction**  
-  [ScienceDirect Article](https://www.sciencedirect.com/science/article/pii/S2001037019304441)
-* **Machine learning for protein folding and dynamics**  
-  [arXiv:1911.09811](https://arxiv.org/abs/1911.09811)
-* **Graph Attention Networks**  
-  [arXiv:1710.10903](https://arxiv.org/abs/1710.10903) | [Video Explanation](https://youtu.be/8owQBFAHw7E)
-* **Learning to Simulate Complex Physics with Graph Networks**  
-  [arXiv:2002.09405](https://arxiv.org/abs/2002.09405) | [GitHub Repository](https://github.com/deepmind/deepmind-research/tree/master/learning_to_simulate)
-* **Set Transformer: A Framework for Attention-based Permutation-Invariant Neural Networks**  
-  [arXiv:1810.00825](https://arxiv.org/abs/1810.00825) | [GitHub Repository](https://github.com/juho-lee/set_transformer)
-* **Learning continuous and data-driven molecular descriptors by translating equivalent chemical representations**  
-  [RSC Publication](https://pubs.rsc.org/en/content/articlehtml/2019/sc/c8sc04175j)
-* **Machine Learning Force Fields**  
-  [arXiv:2010.07067](https://arxiv.org/abs/2010.07067)
-* **Unifying machine learning and quantum chemistry -- a deep neural network for molecular wavefunctions**  
-  [arXiv:1906.10033](https://arxiv.org/abs/1906.10033)
-* **Integrating Machine Learning with Physics-Based Modeling**  
-  [arXiv:2006.02619](https://arxiv.org/abs/2006.02619)
-* **Bypassing the Kohn-Sham equations with machine learning**  
-  [Nature Communications Article](https://www.nature.com/articles/s41467-017-00839-3)
-
-### Chemistry Machine Learning Libraries
-
-* **RDKit**  
-  [Official Documentation](https://www.rdkit.org/)
-* **PyG (PyTorch Geometric)**  
-  [Official Documentation](https://pytorch-geometric.readthedocs.io/en/latest/)
-* **SchNetPack: A Deep Learning Toolbox For Atomistic Systems**  
-  [arXiv:1809.01072](https://arxiv.org/abs/1809.01072) | [GitHub Repository](https://github.com/atomistic-machine-learning/schnetpack)
-* **Graph Networks as a Universal Machine Learning Framework for Molecules and Crystals**  
-  [arXiv:1812.05055](https://arxiv.org/abs/1812.05055) | [GitHub Repository](https://github.com/materialsvirtuallab/megnet)
-* **MoleculeNet: A Benchmark for Molecular Machine Learning**  
-  [arXiv:1703.00564](https://arxiv.org/abs/1703.00564) | [GitHub Repository](https://github.com/deepchem/deepchem)
-
-### Datasets
-
-* **Quantum-Machine.org**  
-  [Dataset Portal](http://quantum-machine.org/datasets/)
-* **GDB Databases**  
-  [Download Page](https://gdb.unibe.ch/downloads/)
-* **Alchemy: A Quantum Chemistry Dataset for Benchmarking AI Models**  
-  [arXiv:1906.09427](https://arxiv.org/abs/1906.09427) | [GitHub Repository](https://github.com/tencent-alchemy/Alchemy)
-* **QM7-X: A comprehensive dataset of quantum-mechanical properties spanning the chemical space of small organic molecules**  
-  [arXiv:2006.15139](https://arxiv.org/abs/2006.15139) | [Zenodo Repository](https://zenodo.org/record/3905361)
-* **The ANI-1ccx and ANI-1x data sets, coupled-cluster and density functional theory properties for molecules**  
-  [Nature Scientific Data Article](https://www.nature.com/articles/s41597-020-0473-z#Sec11)
-* **PyG Datasets**  
-  [Available Datasets Documentation](https://pytorch-geometric.readthedocs.io/en/latest/modules/datasets.html)
-* **Kaggle: Predict Molecular Properties**  
-  [CHAMPS Scalar Coupling Challenge](https://www.kaggle.com/c/champs-scalar-coupling)
-* **QMugs: Quantum Mechanical Properties of Drug-like Molecules**  
-  [arXiv:2107.00367](https://arxiv.org/abs/2107.00367) | [ETH Zürich Repository (DOI)](https://doi.org/10.3929/ethz-b-000482129)
-
 
 
 
