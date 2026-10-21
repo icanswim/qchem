@@ -5,12 +5,12 @@ A framework for molecular modeling. This framework combines the most powerful op
 From *Machine Learning for Molecular Simulation*:
 > In 1929 Paul Dirac stated that: “The underlying physical laws necessary for the mathematical theory of a large part of physics and the whole of chemistry are thus completely known, and the difficulty is only that the exact application of these laws leads to equations much too complicated to be soluble. It therefore becomes desirable that approximate practical methods of applying quantum mechanics should be developed, which can lead to an explanation of the main features of complex atomic systems without too much computation.” Ninety years later, this quote is still state of the art. However, in the last decade, new tools from the rapidly developing field of machine learning (ML) have started to make a significant impact on the development of approximate methods for complex atomic systems, bypassing the direct solution of “equations much too complicated to be soluble”.
 
-## Core Features
+## Features
 * **Lightweight, modular, and extendable** design.
 * Implements datasets, models, and learners directly in **PyTorch**.
-* Built-in environment stack: `pytorch=2.12`, `torch-geometric=2.8.1`, `cuda=12.6`, `python=3.12`, `rdkit=2026.9.1`, `scikit-learn=1.9.1`, `torcheval=0.0.7`.
+* Built-in **uv** and **conda** environments.
+* **Core Stack:** `pytorch=2.12`, `torch-geometric=2.8.1`, `cuda=12.6`, `python=3.12`, `rdkit=2026.9.1`, `scikit-learn=1.9.1`, `torcheval=0.0.7`.
 * Integrates the `icanswim/cosmosis` data science repository for rapid prototyping.
-* Setup instructions can be found in `setup_notes.txt`.
 * Code implementation examples are provided in `experiment.ipynb`.
 
 ---
@@ -59,7 +59,7 @@ cd qchem
 uv sync
 uv run jupyter lab
 ```
-### Conda Environment
+### `conda` Environment
 
 ```bash
 conda env create -f environment.yml
@@ -68,21 +68,14 @@ pip install torcheval
 jupyter lab
 ```
 
-### Conda Environment (Manual Creation)
+### `conda` Environment (Manual Creation)
 
 ```bash
-# Create and activate environment
 conda create --name qchem python=3.12 -y
 conda activate qchem
-
-# Add domain channels
 conda config --add channels nvidia pytorch pyg conda-forge
-
-# Install ML engines, CUDA packages, and data dependencies
 conda install pytorch torchvision torchaudio pytorch-cuda=12.6 rdkit pyg -y
 conda install matplotlib scipy pandas scikit-learn jupyterlab h5py git numpy -y
-
-# Install tracking metric utilities
 pip install torcheval
 jupyter lab
 ```
@@ -90,7 +83,10 @@ jupyter lab
 ---
 
 ### Data Download and Prep
-> See each individual dataset class **docstring** within `src/qchem/dataset.py` for download and prep instructions
+
+```text
+See each individual dataset class **docstring** within `src/qchem/dataset.py` for download and prep instructions
+```
 
 ---
 
@@ -143,7 +139,8 @@ jupyter lab
 
 ### Chemistry Machine Learning Libraries
 
-* **RDKit**  
+* **RDKit**  load and prep instructions
+```
   [Official Documentation](https://www.rdkit.org/)
 * **PyG (PyTorch Geometric)**  
   [Official Documentation](https://pytorch-geometric.readthedocs.io/en/latest/)
