@@ -84,9 +84,8 @@ jupyter lab
 
 ### Data Download and Prep
 
-```text
-See each individual dataset class **docstring** within `src/qchem/dataset.py` for download and prep instructions
-```
+>See each individual dataset class **docstring** within `src/qchem/dataset.py` for download and prep instructions
+
 
 ---
 
@@ -139,8 +138,7 @@ See each individual dataset class **docstring** within `src/qchem/dataset.py` fo
 
 ### Chemistry Machine Learning Libraries
 
-* **RDKit**  load and prep instructions
-```
+* **RDKit**  
   [Official Documentation](https://www.rdkit.org/)
 * **PyG (PyTorch Geometric)**  
   [Official Documentation](https://pytorch-geometric.readthedocs.io/en/latest/)
