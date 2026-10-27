@@ -8,19 +8,21 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "matplotlib>=3.11.2",
-    "numpy>=2.5.4",
-    "pandas>=3.0.6",
-    "scikit-learn>=1.9.1",
-    "scipy>=1.18.1",
-    "torch>=2.12.0,<2.13.0",
-    "torchaudio>=2.11.0,<2.12.0",
-    "torcheval>=0.0.7",
-    "torchvision>=0.27.0,<0.28.0", 
     "cosmosis",
     "h5py>=3.16.0",
-    "rdkit>=2026.9.1",
-    "torch-geometric>=2.8.1",
+    "torch>=2.12.0,<2.13.0",
+    "rdkit>=2026.9.1",    
+    "torch_geometric",
+    "pyg-lib",
+    "torch-scatter",
+    "torch-sparse",
+]
+
+[tool.uv]
+python-preference = "only-managed"
+no-build-isolation-package = ["cosmosis"]
+environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.12'"
 ]
 
 [[tool.uv.index]]
@@ -31,26 +33,21 @@ explicit = true
 [[tool.uv.index]]
 name = "pyg-cu126"
 url = "https://data.pyg.org/whl/torch-2.12.0+cu126.html"
+format = "flat"
 explicit = true
-
-[tool.uv.sources]
-torch = { index = "pytorch-cu126" }
-torchvision = { index = "pytorch-cu126" }
-torchaudio = { index = "pytorch-cu126" }
-cosmosis = { workspace = true }
-pyg-lib = { index = "pyg-cu126" }
-torch-scatter = { index = "pyg-cu126" }
-torch-sparse = { index = "pyg-cu126" }
-torch-cluster = { index = "pyg-cu126" }
-
-[tool.uv]
-no-build-isolation-package = ["cosmosis"]
-environments = [
-    "sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.12'"
-]
 
 [tool.uv.workspace]
 members = ["cosmosis"]
+
+[tool.uv.sources]
+cosmosis = { workspace = true } 
+torch = { index = "pytorch-cu126" }
+torchvision = { index = "pytorch-cu126" }
+torchaudio = { index = "pytorch-cu126" }
+
+pyg-lib = { index = "pyg-cu126" }
+torch-scatter = { index = "pyg-cu126" }
+torch-sparse = { index = "pyg-cu126" }
 
 [project.scripts]
 qchem = "qchem:main"
