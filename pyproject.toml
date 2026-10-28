@@ -36,8 +36,9 @@ url = "https://data.pyg.org/whl/torch-2.12.0+cu126.html"
 format = "flat"
 explicit = true
 
-[tool.uv.workspace]
-members = ["cosmosis"]
+# commented out for nested workspace
+#[tool.uv.workspace]
+#members = ["cosmosis"]
 
 [tool.uv.sources]
 cosmosis = { workspace = true } 
